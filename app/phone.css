@@ -1,0 +1,53 @@
+/* ============ NOVA для телефона: поправки поверх общего style.css ============ */
+
+/* высота экрана без адресной строки; вырезы и полоски системы не закрывают кнопки */
+.app { height: 100vh; height: 100dvh; }
+.topbar { padding-top: env(safe-area-inset-top, 0px); height: calc(62px + env(safe-area-inset-top, 0px)); }
+.composer { padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+.sidebar { padding-top: max(16px, env(safe-area-inset-top, 0px)) !important; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important; }
+
+/* на телефоне нет клавиатурных сочетаний и перетаскивания файлов */
+.search kbd,
+.composer-hint { display: none; }
+
+/* пальцем не «наведёшь» — кнопки под ответами видны всегда */
+@media (hover: none) {
+  .actions { opacity: 1; }
+  .card:hover { transform: none; }
+}
+
+@media (max-width: 860px) {
+  .topbar { gap: 6px; padding-left: 8px; padding-right: 10px; }
+  .chat-title { font-size: 15px; }
+  .model-btn { height: 40px; padding: 0 8px 0 6px; gap: 6px; }
+  .welcome { padding-top: 3vh; }
+  .welcome-orbit { width: 132px; height: 132px; }
+  .greeting { font-size: 28px; }
+  .welcome-sub { font-size: 14px; margin-bottom: 22px; }
+  .card { padding: 13px; }
+  .msg.user .bubble { max-width: 88%; }
+  .md { font-size: 15px; }
+  .md pre { font-size: 12.5px; }
+  .settings-card { max-height: 92dvh; }
+}
+
+/* поле ввода на телефоне — 16px, иначе браузер приближает страницу при нажатии */
+#input, .settings input, .settings textarea, .settings select, .search input { font-size: 16px; }
+
+/* кнопка «Установить NOVA на телефон»: под шапкой, меню чатов её закрывает */
+.install-pill {
+  position: fixed;
+  left: 50%;
+  top: calc(68px + env(safe-area-inset-top, 0px));
+  translate: -50% 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--grad);
+  box-shadow: 0 12px 34px rgba(124, 58, 237, 0.5);
+  animation: pop 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.install-pill button { border: 0; background: none; color: #fff; font-weight: 600; white-space: nowrap; }
+.install-pill .ip-go { padding: 10px 6px 10px 18px; font-size: 14px; }
+.install-pill .ip-x { padding: 10px 14px 10px 8px; font-size: 13px; opacity: 0.8; }

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#07080f">
+  <meta name="description" content="NOVA для телефона: личный ИИ-ассистент на Gemini.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>NOVA</title>
+  <link rel="icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="phone.css">
+  <script>window.NOVA_TOKEN = "phone";
+    window.NOVA_CARDS = [
+      { icon: "cloud", title: "Погода", text: "Что сейчас в Москве и что будет завтра",
+        prompt: "Какая сейчас погода в Москве и что будет завтра?" },
+      { icon: "coins", title: "Курсы валют", text: "Доллар, евро и юань по курсу ЦБ",
+        prompt: "Какой сегодня курс доллара, евро и юаня по ЦБ? Покажи таблицей." },
+      { icon: "globe", title: "Что такое…", text: "Коротко и понятно, с проверкой по Википедии",
+        prompt: "Объясни простыми словами, что такое чёрная дыра. Проверь по Википедии." },
+      { icon: "bulb", title: "Идея для игры", text: "Придумать что-нибудь необычное",
+        prompt: "Придумай необычную идею для игры и опиши её в 5 пунктах." },
+    ];</script>
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"></div>
+  <canvas id="stars" aria-hidden="true"></canvas>
+
+  <div class="app" id="app">
+    <!-- ЛЕВАЯ ПАНЕЛЬ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-logo" data-orbit="mini"></span>
+        <span class="brand-name">NOVA</span>
+        <button class="icon-btn" id="collapseBtn" type="button" title="Скрыть панель" data-icon="panel"></button>
+      </div>
+
+      <button class="new-chat" id="newChatBtn" type="button">
+        <span data-icon="plus"></span><span>Новый чат</span>
+      </button>
+
+      <label class="search">
+        <span data-icon="search"></span>
+        <input id="searchInput" type="text" placeholder="Поиск по чатам" autocomplete="off" spellcheck="false">
+        <kbd>Ctrl K</kbd>
+      </label>
+
+      <nav class="history" id="history" aria-label="История чатов"></nav>
+
+      <div class="sidebar-foot">
+        <div class="status" id="statusBox" title="">
+          <span class="dot"></span><span class="status-text">подключаюсь…</span>
+        </div>
+        <button class="icon-btn" id="settingsBtn" type="button" title="Настройки" data-icon="gear"></button>
+        <button class="icon-btn" id="themeBtn" type="button" title="Светлая / тёмная тема" data-icon="sun"></button>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <!-- ОСНОВНАЯ ОБЛАСТЬ -->
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn" id="openSidebarBtn" type="button" title="Показать панель" data-icon="panel"></button>
+        <h1 class="chat-title" id="chatTitle" title="Двойной щелчок — переименовать">Новый чат</h1>
+        <button class="role-badge" id="roleBadge" type="button" title="Роль NOVA в этом чате — нажми, чтобы изменить" hidden></button>
+        <div class="chat-menu-wrap">
+          <button class="icon-btn" id="chatMenuBtn" type="button" title="Действия с чатом" data-icon="dots"></button>
+          <div class="menu" id="chatMenu" hidden>
+            <button type="button" data-act="role"><span data-icon="mask"></span>Роль чата…</button>
+            <button type="button" data-act="rename" data-needs-messages><span data-icon="pencil"></span>Переименовать</button>
+            <div class="menu-sep"></div>
+            <button type="button" data-act="md" data-needs-messages><span data-icon="download"></span>Скачать .md<small>для чтения</small></button>
+            <button type="button" data-act="json" data-needs-messages><span data-icon="download"></span>Скачать .json<small>для импорта</small></button>
+            <div class="menu-sep"></div>
+            <button type="button" data-act="delete" data-needs-messages class="danger"><span data-icon="trash"></span>Удалить чат</button>
+          </div>
+        </div>
+        <div class="mode-switch" id="modeSwitch" role="tablist" aria-label="Режим"></div>
+      </header>
+
+      <section class="scroller" id="scroller">
+        <div class="welcome" id="welcome">
+          <div class="welcome-orbit" data-orbit="big"></div>
+          <h2 class="greeting" id="greeting">Привет!</h2>
+          <p class="welcome-sub">Я NOVA — твой персональный ИИ-ассистент. Спрашивай что угодно:
+            я узнаю погоду и курсы валют, проверяю факты в Википедии, смотрю картинки и PDF.</p>
+          <div class="problem" id="problem" hidden></div>
+          <div class="cards" id="cards"></div>
+        </div>
+        <div class="thread" id="thread"></div>
+      </section>
+
+      <button class="to-bottom" id="toBottom" type="button" title="Вниз" data-icon="arrowDown"></button>
+
+      <footer class="composer">
+        <div class="composer-box" id="composerBox">
+          <div class="tray" id="tray" hidden></div>
+          <div class="voice-strip" id="voiceStrip" hidden>
+            <span class="rec-dot"></span>
+            <span class="rec-time" id="recTime">0:00</span>
+            <canvas id="voiceWave"></canvas>
+            <span class="rec-hint">Говори — текст появится ниже</span>
+          </div>
+          <div class="composer-row">
+            <button class="icon-btn attach" id="attachBtn" type="button" title="Прикрепить картинку или файл" data-icon="paperclip"></button>
+            <textarea id="input" rows="1" placeholder="Спроси NOVA…" spellcheck="true"></textarea>
+            <button class="icon-btn mic" id="micBtn" type="button" title="Сказать голосом" data-icon="mic"></button>
+            <button class="send" id="sendBtn" type="button" title="Отправить (Enter)" data-icon="arrowUp" disabled></button>
+          </div>
+        </div>
+        <input type="file" id="fileInput" multiple hidden>
+        <div class="composer-hint">NOVA может ошибаться — проверяй важное · <b>Enter</b> — отправить, <b>Shift+Enter</b> — новая строка · файлы можно <b>перетащить</b> в окно</div>
+      </footer>
+
+      <div class="drop" id="drop" hidden>
+        <div class="drop-card">
+          <span class="drop-icon" data-icon="upload"></span>
+          <b>Отпусти, чтобы прикрепить</b>
+          <small>Картинки, скриншоты, PDF, Word, код и тексты — до 5 файлов</small>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt=""></div>
+
+  <div class="settings" id="settings" hidden>
+    <div class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header class="settings-head">
+        <span class="settings-icon" data-icon="gear"></span>
+        <h3 id="settingsTitle">Настройки</h3>
+        <span class="saved" id="savedMark">Сохранено</span>
+        <button class="icon-btn" id="settingsClose" type="button" title="Закрыть (Esc)" data-icon="x"></button>
+      </header>
+      <div class="settings-body">
+        <section id="keySection">
+          <h4>Ключ Gemini</h4>
+          <div class="key-status" id="keyStatus"></div>
+          <div class="key-row">
+            <input id="keyInput" type="password" placeholder="Вставь ключ сюда (Ctrl+V)" autocomplete="off" spellcheck="false">
+            <button class="btn primary" id="keySave" type="button">Проверить и сохранить</button>
+          </div>
+          <p class="key-help">Ключ бесплатный: открой <a href="https://aistudio.google.com/apikey" data-ext>aistudio.google.com/apikey</a>,
+            войди в Google-аккаунт → «Create API key» → скопируй ключ. Он хранится только на этом телефоне.</p>
+        </section>
+
+        <section>
+          <h4>Профиль</h4>
+          <div class="field-row">
+            <label class="field"><span>Как тебя зовут</span>
+              <input id="setName" type="text" maxlength="40" placeholder="NOVA будет так к тебе обращаться" autocomplete="off"></label>
+            <label class="field"><span>Твой город</span>
+              <input id="setCity" type="text" maxlength="60" placeholder="Для погоды, если город не назван" autocomplete="off"></label>
+          </div>
+        </section>
+
+        <section>
+          <h4>Характер NOVA</h4>
+          <div class="personas" id="personas"></div>
+          <label class="field"><span>Свои инструкции</span>
+            <textarea id="setCustom" rows="3" maxlength="1500" placeholder="Например: называй меня бро, отвечай без эмодзи, объясняй на примерах из игр"></textarea></label>
+        </section>
+
+        <section>
+          <h4>Голос</h4>
+          <label class="toggle-row">
+            <span><b>Озвучивать ответы автоматически</b><small>NOVA читает ответ вслух, как только допишет</small></span>
+            <input type="checkbox" class="switch" id="setAutoSpeak">
+          </label>
+          <label class="toggle-row">
+            <span><b>Отправлять голосовое сразу</b><small>Сказал в микрофон — сообщение ушло без Enter</small></span>
+            <input type="checkbox" class="switch" id="setVoiceSend">
+          </label>
+          <div class="field-row">
+            <label class="field"><span>Голос</span><select id="setVoice"></select></label>
+            <label class="field"><span>Скорость речи: <b id="rateValue">1.05×</b></span>
+              <input id="setRate" type="range" min="0.6" max="1.8" step="0.05"></label>
+          </div>
+          <button class="btn" id="testVoice" type="button"><span data-icon="volume"></span>Проверить голос</button>
+        </section>
+
+        <section>
+          <h4>Оформление</h4>
+          <div class="seg" id="themeSeg">
+            <button type="button" data-theme-opt="dark"><span data-icon="moon"></span>Тёмная</button>
+            <button type="button" data-theme-opt="light"><span data-icon="sun"></span>Светлая</button>
+          </div>
+        </section>
+
+        <section>
+          <h4>Данные</h4>
+          <div class="toggle-row">
+            <span><b>Импортировать чат</b><small>Из файла .json, который NOVA сохранила раньше (меню «⋯» у чата)</small></span>
+            <button class="btn" id="importBtn" type="button">Выбрать файл</button>
+          </div>
+          <input type="file" id="importInput" accept=".json,application/json" hidden>
+          <div class="toggle-row">
+            <span><b>Удалить все чаты</b><small>Вместе с вложениями. Вернуть будет нельзя.</small></span>
+            <button class="btn danger" id="deleteAll" type="button">Удалить всё</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings" id="roleModal" hidden>
+    <div class="settings-card role-card" role="dialog" aria-modal="true" aria-labelledby="roleTitle">
+      <header class="settings-head">
+        <span class="settings-icon" data-icon="mask"></span>
+        <h3 id="roleTitle">Роль чата</h3>
+        <button class="icon-btn" id="roleClose" type="button" title="Закрыть (Esc)" data-icon="x"></button>
+      </header>
+      <div class="settings-body">
+        <p class="role-hint">Кем будет NOVA <b>именно в этом чате</b>. Роль сохраняется вместе с чатом, в других чатах NOVA остаётся обычной.</p>
+        <div class="presets" id="rolePresets"></div>
+        <label class="field"><span>Роль своими словами</span>
+          <textarea id="roleText" rows="5" maxlength="1500" placeholder="Например: ты строгий преподаватель физики, объясняй через задачи и проверяй меня вопросами"></textarea></label>
+        <div class="modal-actions">
+          <button class="btn" id="roleClear" type="button">Убрать роль</button>
+          <button class="btn primary" id="roleSave" type="button">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <h3 id="modalTitle"></h3>
+      <p id="modalText"></p>
+      <div class="modal-actions">
+        <button class="btn" id="modalCancel" type="button">Отмена</button>
+        <button class="btn danger" id="modalOk" type="button">Удалить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="markdown.js"></script>
+  <script src="core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
