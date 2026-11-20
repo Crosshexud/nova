@@ -16,6 +16,10 @@
   .card:hover { transform: none; }
 }
 
+/* на телефоне одна модель — кнопка модели компактная, только значок: место отдаём названию чата */
+.model-btn .mb-text { display: none; }
+.model-btn { gap: 4px; }
+
 @media (max-width: 860px) {
   .topbar { gap: 6px; padding-left: 8px; padding-right: 10px; }
   .chat-title { font-size: 15px; }

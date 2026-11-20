@@ -753,6 +753,12 @@ kbd {
   border-radius: 12px;
   overflow-x: auto;
 }
+/* шире экрана — правый край гаснет, пока не долистали (классы ставит markScrollables) */
+.table-wrap.scrollable:not(.at-end),
+.code-block pre.scrollable:not(.at-end) {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent);
+}
 .md table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .md th, .md td {
   padding: 9px 13px;
@@ -1427,6 +1433,7 @@ kbd {
   min-width: 0;
   transition: background 0.15s, transform 0.15s;
 }
+.role-badge .rb-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .role-badge:hover { background: rgba(139, 92, 246, 0.24); transform: translateY(-1px); }
 .role-badge[hidden] { display: none; }
 .chat-title { flex: 0 1 auto; }
@@ -1568,4 +1575,28 @@ kbd {
   .composer { padding: 0 12px 12px; }
   .composer-hint { display: none; }
   .greeting { font-size: 30px; }
+
+  /* узкий экран (телефон): всё помещается в ширину */
+  .chat-title { flex: 1 1 auto; }
+  .role-badge { flex-shrink: 0; padding: 0 9px; }
+  .role-badge .rb-text { display: none; } /* только значок роли */
+  #chatMenu { /* меню «⋯» — от левого края экрана, а не от кнопки, иначе уезжает за край */
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 58px);
+    left: 10px;
+    right: auto;
+    width: min(300px, calc(100vw - 20px));
+  }
+  .toasts { top: calc(env(safe-area-inset-top, 0px) + 10px); left: 10px; right: 10px; align-items: center; }
+  .toast { max-width: 100%; }
+  .md table { font-size: 13.5px; }
+  .md th { white-space: normal; }
+  .md th, .md td { padding: 8px 10px; }
+}
+
+@media (max-width: 520px) {
+  .key-row { flex-direction: column; }
+  .key-row .btn { width: 100%; padding: 11px 16px; }
+  .modal-actions .btn { flex: 1; }
+  .settings-card { width: calc(100vw - 20px); }
 }

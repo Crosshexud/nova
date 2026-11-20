@@ -1,6 +1,6 @@
 // NOVA для телефона: приложение открывается и без интернета (показывается окно и сохранённые чаты).
 // Сначала всегда берётся свежая версия из сети, копия в телефоне — запасная.
-const CACHE = "nova-phone-20261120-1931";
+const CACHE = "nova-phone-20261120-1939";
 const SHELL = [
   "./", "index.html", "style.css", "phone.css", "app.js", "markdown.js", "core.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",

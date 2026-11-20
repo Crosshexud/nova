@@ -545,7 +545,14 @@
     els.title.title = has ? "Двойной щелчок — переименовать" : "";
     const role = S.current && S.current.role;
     els.roleBadge.hidden = !role;
-    if (role) els.roleBadge.textContent = roleLabel(role);
+    if (role) {
+      // значок и текст отдельно: на узком экране остаётся только значок
+      const label = roleLabel(role);
+      const sp = label.indexOf(" ");
+      els.roleBadge.innerHTML = '<span class="rb-emoji"></span><span class="rb-text"></span>';
+      $(".rb-emoji", els.roleBadge).textContent = label.slice(0, sp);
+      $(".rb-text", els.roleBadge).textContent = label.slice(sp + 1);
+    }
   }
 
   // ---------- выбор модели: Note / Chord / Symphony ----------
@@ -802,6 +809,15 @@
     }));
   }
 
+  // Таблица или код шире экрана: правый край мягко гаснет — видно, что можно листать вбок.
+  function markScrollables(root) {
+    requestAnimationFrame(() => root.querySelectorAll(".table-wrap, .code-block pre").forEach((el) => {
+      const more = el.scrollWidth > el.clientWidth + 2;
+      el.classList.toggle("scrollable", more);
+      el.classList.toggle("at-end", !more || el.scrollLeft + el.clientWidth >= el.scrollWidth - 2);
+    }));
+  }
+
   function aiMsg() {
     const w = div("msg ai");
     w.innerHTML =
@@ -956,6 +972,7 @@
       },
       fill(m) {
         md.innerHTML = MD.render(m.text);
+        markScrollables(md);
         setSources(m.sources);
         when(m.time);
         setActions(m.text, m.local);
@@ -977,6 +994,7 @@
         const complete = () => {
           md.innerHTML = MD.render(finalText);
           if (streamed) settleTail(md);
+          markScrollables(md);
           setSources(ev.sources);
           when(null, ev.model);
           if (finalText) setActions(finalText, kind === "command");
@@ -2170,6 +2188,18 @@
     setInterval(ping, 15000);
     // версия для телефона сообщает, что что-то поменялось само (например, пришло название чата)
     addEventListener("nova:refresh", () => { if (!S.busy) syncState(); });
+    // таблицы и код, которые листаются вбок: гасим край, пока не долистали до конца
+    els.thread.addEventListener("scroll", (e) => {
+      const el = e.target;
+      if (el.classList && el.classList.contains("scrollable")) {
+        el.classList.toggle("at-end", el.scrollLeft + el.clientWidth >= el.scrollWidth - 2);
+      }
+    }, true);
+    let resizeTimer = 0;
+    addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => markScrollables(els.thread), 200);
+    });
     const q = new URLSearchParams(location.search).get("q");
     if (q) send(q);
     els.input.focus();
