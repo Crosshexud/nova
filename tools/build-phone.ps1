@@ -39,6 +39,13 @@ $swaps = [ordered]@{
   "я умею искать в интернете, узнавать погоду, новости и курсы валют." =
     "я узнаю погоду и курсы валют, проверяю факты в Википедии, смотрю картинки и PDF."
   "Он хранится только на этом компьютере." = "Он хранится только на этом телефоне."
+  "Ключ хранится только на этом компьютере." = "Ключ хранится только на этом телефоне."
+  'placeholder="Ключ авторизации GigaChat (или DeepSeek «sk-…»)"' = 'placeholder="Ключ DeepSeek или OpenRouter «sk-…»"'
+  '<p class="key-help">Sonata — это GigaChat от Сбера: работает в России без VPN и для физлиц бесплатна.' =
+    '<p class="key-help">На телефоне Sonata — это DeepSeek: нужен ключ DeepSeek или OpenRouter (начинается с «sk-»). Ключ GigaChat работает только в NOVA на компьютере — Сбер не пускает запросы из браузера.'
+  'Ключ: <a href="https://developers.sber.ru/studio" data-ext>developers.sber.ru/studio</a> → войти через Сбер ID →' = ''
+  '«Создать проект» → GigaChat API → «Получить ключ» → скопировать «Ключ авторизации».' = ''
+  'Подойдёт и ключ <a href="https://platform.deepseek.com/api_keys" data-ext>DeepSeek</a>' = 'Где взять: <a href="https://platform.deepseek.com/api_keys" data-ext>DeepSeek</a>'
   'placeholder="Спроси NOVA о чём угодно…"' = 'placeholder="Спроси NOVA…"'
   '<script src="/markdown.js"></script>' = "<script src=`"markdown.js`"></script>`n  <script src=`"core.js`"></script>"
   '<script src="/app.js"></script>' = '<script src="app.js"></script>'

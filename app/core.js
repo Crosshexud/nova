@@ -12,7 +12,7 @@
   // На телефоне две модели: Sonata (DeepSeek, в России без VPN) и Symphony (Gemini).
   const MODES = {
     sonata: {
-      title: "Sonata", kind: "сильная модель", hint: "DeepSeek через интернет. Нужен ключ DeepSeek",
+      title: "Sonata", kind: "сильная модель", hint: "DeepSeek через интернет. Нужен ключ DeepSeek или OpenRouter",
       engine: "deepseek", group: "novpn",
     },
     symphony: {
@@ -48,14 +48,17 @@
 
   const DEFAULT_SETTINGS = {
     mode: DEFAULT_MODE, name: "", city: "", persona: "friendly", custom: "",
-    auto_speak: false, voice_send: false, voice: "", rate: 1.05,
+    auto_speak: false, voice_send: false, voice: "", rate: 1.05, memory: true,
   };
 
   const BASE_PROMPT = "Ты NOVA — персональный ИИ-ассистент. О себе говоришь в женском роде. Отвечай на языке пользователя.";
   const tierPrompt = (mode) =>
     ` Сейчас ты работаешь как модель NOVA ${MODES[mode].title} (${mode === "sonata" ? "DeepSeek" : "Gemini"}) ` +
     "в версии NOVA для телефона. Всего у NOVA четыре модели: Note и Chord работают на компьютере без интернета, " +
-    "Sonata (DeepSeek) работает в России без VPN, Symphony (Gemini) видит картинки и PDF.";
+    "Sonata работает в России без VPN (на компьютере — GigaChat от Сбера, на телефоне — DeepSeek), " +
+    "Symphony (Gemini) видит картинки и PDF. Управлять телефоном ты не можешь — это умеет только NOVA на компьютере " +
+    "(открывать и закрывать программы, громкость, скриншот экрана). Таймеры и напоминания на телефоне срабатывают, " +
+    "пока NOVA открыта.";
   const FORMAT_PROMPT =
     "Ответы показываются с Markdown-оформлением: используй его, когда это помогает читать — " +
     "**жирный** для главного, списки, короткие заголовки ###, `код` и блоки ```кода``` с указанием языка, " +
@@ -121,7 +124,7 @@
     for (const [k, limit] of [["name", 40], ["city", 60], ["voice", 120], ["custom", 1500]]) {
       if (typeof data[k] === "string") s[k] = data[k].trim().slice(0, limit);
     }
-    for (const k of ["auto_speak", "voice_send"]) if (typeof data[k] === "boolean") s[k] = data[k];
+    for (const k of ["auto_speak", "voice_send", "memory"]) if (typeof data[k] === "boolean") s[k] = data[k];
     const rate = parseFloat(data.rate);
     if (!isNaN(rate)) s.rate = Math.round(Math.min(1.8, Math.max(0.6, rate)) * 100) / 100;
     return s;
@@ -181,6 +184,7 @@
   const chats = new Map();
   let current = makeChat();
   let busy = false;
+  let voiceMode = false; // голосовой разговор — отвечать коротко и без оформления
   let lastModel = null;
 
   const ready = (async () => {
@@ -209,9 +213,10 @@
     return "Новый чат";
   }
 
-  function record(chat, role, text, { sources, local, stopped, files, note } = {}) {
+  function record(chat, role, text, { sources, local, stopped, files, note, remembered } = {}) {
     const stamp = nowIso();
     const msg = { role, text, time: stamp };
+    if (remembered && remembered.length) msg.remembered = remembered; // что NOVA запомнила в долгую память
     if (files && files.length) msg.files = files;
     if (sources && sources.length) msg.sources = sources.map((s) => [...s]);
     if (local) msg.local = true;
@@ -274,6 +279,8 @@
       personas: Object.fromEntries(Object.entries(PERSONAS).map(([k, v]) => [k, { title: v.title, desc: v.desc }])),
       model: ok ? model() : null,
       busy,
+      timers: timerList(),
+      now: Date.now() / 1000,
       current: cur,
       chats: list.map(summary),
     };
@@ -474,12 +481,22 @@
     if (s.name) about.push(`Пользователя зовут ${s.name} — иногда обращайся по имени, но не в каждом ответе.`);
     if (s.city) about.push(`Город пользователя — ${s.city}: если про погоду или местные дела спрашивают без города, имей в виду его.`);
     if (about.length) parts.push(about.join(" "));
+    if (memOn()) {
+      parts.push(MEM_RULES);
+      const known = memBlock();
+      if (known) parts.push(known);
+    }
     if (s.custom) parts.push("Особые пожелания пользователя — выполняй их:\n" + s.custom);
     if (role) {
       parts.push(
         "РОЛЬ В ЭТОМ ЧАТЕ — она важнее общего характера: веди себя так, как описано ниже " +
         "(ты по-прежнему NOVA, правила оформления и инструменты остаются):\n" + role
       );
+    }
+    if (voiceMode) {
+      parts.push("Сейчас идёт голосовой разговор: твой ответ прочитают вслух. Отвечай коротко (1–3 предложения), живо " +
+        "и разговорно, без списков, таблиц, заголовков, ссылок, кода и эмодзи. Если тема большая — скажи главное " +
+        "и предложи рассказать подробнее.");
     }
     const d = new Date();
     parts.push(`Сейчас ${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${WEEKDAYS[d.getDay()]}, ` +
@@ -608,6 +625,340 @@
   }
 
   const TOOLS = { get_weather: getWeather, get_exchange_rates: getExchangeRates, search_wikipedia: searchWikipedia };
+
+  // ---------- долгая память (как на компьютере, но хранится в телефоне) ----------
+
+  const MEM_RULES =
+    "У тебя есть долгая память о пользователе (инструменты remember и forget). Когда пользователь рассказывает о себе " +
+    "что-то устойчивое и важное — имя, возраст, учёба или работа, город, друзья и родные, питомцы, увлечения, любимые " +
+    "игры и музыка, свои проекты, цели, как ему удобнее получать ответы — вызови remember с коротким фактом от третьего " +
+    "лица. Один вызов — одна мысль. Если просит «запомни» — тоже remember. Не запоминай разовое и секреты (пароли, " +
+    "номера карт, коды). Если факт устарел или просят забыть — forget только этот факт. NOVA сама покажет под ответом, что запомнила.";
+  const SECRET_RE = /парол|password|\bpin\b|пин[- ]?код|cvv|cvc|номер карт|карт[аы]\s*\d|\b\d{4}[ -]?\d{4}[ -]?\d{4}|код из смс|ключ api|api key|\bтокен|\btoken|sk-[a-z0-9]/i;
+  const MEM_SPECIAL = [
+    [/^(возраст|сколько мне лет|мой возраст)/, /\b\d{1,3} (лет|год)|возраст/],
+    [/^(имя|как меня зовут|меня зовут|мое имя)/, /зовут|(^|\s)имя(\s|$)/],
+  ];
+  let memFresh = [];
+  const memOn = () => settings.memory !== false;
+  const memFacts = () => LS.get("memory", []);
+  const normText = (s) => String(s || "").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  function wordsAlike(a, b) {
+    const A = new Set(normText(a).split(" ")), B = new Set(normText(b).split(" "));
+    let n = 0;
+    for (const w of A) if (B.has(w)) n++;
+    return n / Math.max(A.size, B.size, 1);
+  }
+  function splitFact(text) {
+    text = String(text || "").replace(/\s+/g, " ").trim().replace(/^[ .]+|[ .]+$/g, "");
+    if (text.startsWith("Со слов пользователя")) return [text];
+    const parts = text.split(/;\s+|,\s+(?![^«]*»)/).map((p) => p.trim().replace(/^[ .]+|[ .]+$/g, ""));
+    if (parts.length >= 3 && parts.every((p) => p.split(" ").length >= 2)) return parts.map((p) => p[0].toUpperCase() + p.slice(1));
+    return [text];
+  }
+  function memAdd(text) {
+    text = String(text || "").replace(/\s+/g, " ").trim().replace(/^[ .]+|[ .]+$/g, "").slice(0, 300);
+    if (text.length < 3) return [null, "пусто"];
+    if (SECRET_RE.test(text)) return [null, "секрет"];
+    text = text[0].toUpperCase() + text.slice(1);
+    const list = memFacts();
+    for (const x of list) {
+      const r = wordsAlike(text, x.text);
+      if (r > 0.9) return [x, "same"];
+      if (r > 0.65) {
+        Object.assign(x, { text, at: Math.round(Date.now() / 1000) });
+        LS.set("memory", list);
+        return [x, "updated"];
+      }
+    }
+    const item = { id: Math.random().toString(36).slice(2, 12), text, at: Math.round(Date.now() / 1000) };
+    LS.set("memory", [...list, item].slice(-80));
+    return [item, "new"];
+  }
+  function memRemove(query) {
+    const q = String(query || "").trim();
+    const list = memFacts();
+    let gone;
+    if (["все", "всё", "all", "все факты", "всю память"].includes(normText(q))) gone = list;
+    else if (list.some((x) => x.id === q)) gone = list.filter((x) => x.id === q);
+    else {
+      const nq = normText(q).replace(/^(про|о|об|что|как)\s+/, "");
+      const special = MEM_SPECIAL.find(([w]) => w.test(nq));
+      if (special) gone = list.filter((x) => special[1].test(normText(x.text)));
+      else {
+        const stems = (nq.match(/[\p{L}\p{N}]{3,}/gu) || []).map((w) => w.slice(0, Math.max(4, w.length - 2)));
+        gone = list.filter((x) => stems.length && stems.every((st) => normText(x.text).includes(st)));
+      }
+    }
+    if (gone.length) LS.set("memory", list.filter((x) => !gone.includes(x)));
+    return gone;
+  }
+  function memBlock() {
+    if (!memOn()) return "";
+    const lines = [];
+    let size = 0;
+    for (const x of [...memFacts()].sort((a, b) => (b.at || 0) - (a.at || 0))) {
+      if (size + x.text.length > 3500) break;
+      lines.unshift("- " + x.text);
+      size += x.text.length + 3;
+    }
+    if (!lines.length) return "";
+    return "ДОЛГАЯ ПАМЯТЬ — что ты знаешь о пользователе из прошлых разговоров. Используй, когда это к месту " +
+      "(подстраивай советы и примеры), но не пересказывай без повода:\n" + lines.join("\n");
+  }
+  TOOLS.remember = async ({ fact }) => {
+    if (!memOn()) return { error: "Долгая память выключена в настройках NOVA — не запоминаю." };
+    const saved = [];
+    for (const part of splitFact(fact)) {
+      const [item, how] = memAdd(part);
+      if (!item) {
+        if (how === "секрет") return { error: "Это секрет — такое NOVA не запоминает." };
+        continue;
+      }
+      if (how !== "same" && !memFresh.includes(item.text)) memFresh.push(item.text);
+      saved.push(item.text);
+    }
+    return saved.length ? { ok: true, remembered: saved } : { error: "Пустой факт." };
+  };
+  TOOLS.forget = async ({ fact }) => {
+    const gone = memRemove(fact);
+    return gone.length ? { ok: true, forgotten: gone.map((x) => x.text) } : { error: "Не нашла такого в памяти.", memory: memFacts().map((x) => x.text).slice(0, 40) };
+  };
+
+  // Подстраховка для моделей, которые не вызывают remember: имя, возраст, город NOVA замечает сама.
+  const NOT_NAMES = new Set(["так", "как", "просто", "все", "всё", "никак", "по", "тоже", "также", "иначе", "вроде", "типа"]);
+  const AUTO_RULES = [
+    [/(?:^|[^\p{L}])меня\s+зовут\s+([\p{L}]{2,15})(?=[\s,.!?)]|$)/iu, "Пользователя зовут "],
+    [/(?:^|[^\p{L}])мне\s+(\d{1,2})\s+(?:год|года|лет)(?![\p{L}])/iu, "Возраст пользователя: "],
+    [/(?:^|[^\p{L}])я\s+(?:сейчас\s+)?живу\s+в\s+([\p{L}-]{3,20})(?=[\s,.!?)]|$)/iu, "Живёт в городе "],
+  ];
+  function memAuto(text) {
+    if (!memOn() || memFresh.length) return;
+    for (const [rx, prefix] of AUTO_RULES) {
+      const m = String(text || "").match(rx);
+      if (!m || NOT_NAMES.has(m[1].toLowerCase())) continue;
+      const [item, how] = memAdd(prefix + m[1][0].toUpperCase() + m[1].slice(1));
+      if (item && how !== "same") memFresh.push(item.text);
+    }
+  }
+
+  function memoryCommand(text) {
+    const t = text.replace(/\s+/g, " ").trim();
+    const low = t.toLowerCase().replace(/ё/g, "е").replace(/[ .!?]+$/, "");
+    if (["что ты обо мне знаешь", "что ты обо мне помнишь", "что ты помнишь обо мне", "что ты знаешь обо мне", "покажи память", "что в памяти"].includes(low)) {
+      const list = memFacts();
+      if (!list.length) return "Пока я ничего о тебе не запомнила. Расскажи о себе — или напиши «запомни, что …».";
+      return "Вот что я о тебе помню:\n" + list.map((x) => "- " + x.text).join("\n") + "\n\nУдалить можно в ⚙ Настройках → «Память» или словами «забудь …».";
+    }
+    let m = t.match(/^(?:nova,?\s+)?запомни(?:,?\s*что)?[,:]?\s+([\s\S]{3,})$/i);
+    if (m && memOn()) {
+      let fact = m[1].trim().replace(/^[«»"]+|[«»"]+$/g, "");
+      fact = `Со слов пользователя: «${fact[0].toUpperCase() + fact.slice(1)}»`;
+      const [item, how] = memAdd(fact);
+      if (!item) return how === "секрет" ? "Это похоже на секрет (пароль, карта, код) — такое я не запоминаю. 🔒" : null;
+      return { new: "Запомнила! 🧠", updated: "Обновила в памяти! 🧠", same: "Это я уже помню. 🧠" }[how] + "\n\n> " + item.text;
+    }
+    m = t.match(/^забудь(?:,?\s*что)?[,:]?\s+([\s\S]{2,})$/i);
+    if (m) {
+      const gone = memRemove(m[1]);
+      return gone.length ? "Забыла: " + gone.map((x) => x.text).join("; ") + "." : null;
+    }
+    return null;
+  }
+
+  // ---------- таймеры и напоминания (на телефоне — пока NOVA открыта) ----------
+
+  const NUM_WORDS = { одну: 1, один: 1, одна: 1, две: 2, два: 2, три: 3, четыре: 4, пять: 5, шесть: 6, семь: 7, восемь: 8,
+    девять: 9, десять: 10, пятнадцать: 15, двадцать: 20, тридцать: 30, сорок: 40, пятьдесят: 50 };
+  const UNIT_RE = [[/^(час(?:а|ов)?|ч)$/, 3600], [/^(минут(?:а|у|ы)?|мин|м)$/, 60], [/^(секунд(?:а|у|ы)?|сек|с)$/, 1]];
+  const DUR_RE = new RegExp("(?<![\\p{L}\\p{N}])(\\d+(?:[.,]\\d+)?|" + Object.keys(NUM_WORDS).join("|") +
+    ")?\\s*(час(?:а|ов)?|ч|минут(?:а|у|ы)?|мин|м|секунд(?:а|у|ы)?|сек|с)(?![\\p{L}])", "gu");
+  const timerList = () => LS.get("timers", []);
+  function parseWhen(text, now = Date.now() / 1000) {
+    let s = String(text || "").toLowerCase().replace(/ё/g, "е").replace(/^[ .!]+|[ .!]+$/g, "").replace(/^(через|на|в течение)\s+/, "");
+    if (["полчаса", "пол часа"].includes(s)) return now + 1800;
+    if (s === "полтора часа") return now + 5400;
+    const m = s.match(/(завтра\s+)?(?:в\s+)?(\d{1,2})(?:[:.](\d{2}))?\s*(утра|дня|вечера|ночи)?$/);
+    if (m && (m[3] || m[4] || /^(в |завтра)/.test(s))) {
+      let h = +m[2];
+      const mi = +(m[3] || 0);
+      if ((m[4] === "дня" || m[4] === "вечера") && h < 12) h += 12;
+      if (m[4] === "ночи" && h === 12) h = 0;
+      if (h > 23 || mi > 59) return null;
+      const d = new Date(now * 1000);
+      d.setHours(h, mi, 0, 0);
+      if (m[1] || d.getTime() / 1000 <= now + 5) d.setDate(d.getDate() + 1);
+      return d.getTime() / 1000;
+    }
+    let total = 0, found = false;
+    for (const x of s.matchAll(DUR_RE)) {
+      const mult = UNIT_RE.find(([re]) => re.test(x[2]))[1];
+      const n = x[1] ? (NUM_WORDS[x[1]] || parseFloat(x[1].replace(",", "."))) : 1;
+      total += n * mult;
+      found = true;
+    }
+    if (found && total > 0) return now + total;
+    if (/^\d+(?:[.,]\d+)?$/.test(s)) return now + parseFloat(s.replace(",", ".")) * 60;
+    return null;
+  }
+  function sayIn(sec) {
+    sec = Math.round(sec);
+    if (sec < 60) return sec + " сек";
+    const h = Math.floor(sec / 3600), mn = Math.floor((sec % 3600) / 60), sc = sec % 60;
+    return [h && h + " ч", mn && mn + " мин", sc && !h && sc + " сек"].filter(Boolean).join(" ");
+  }
+  function clockTime(at) {
+    const d = new Date(at * 1000), now = new Date();
+    const hm = pad(d.getHours()) + ":" + pad(d.getMinutes()) + (at - Date.now() / 1000 < 120 ? ":" + pad(d.getSeconds()) : "");
+    if (d.toDateString() === now.toDateString()) return "в " + hm;
+    const tmr = new Date(now.getTime() + 864e5);
+    return (d.toDateString() === tmr.toDateString() ? "завтра в " : pad(d.getDate()) + "." + pad(d.getMonth() + 1) + " в ") + hm;
+  }
+  function timerAdd(at, text) {
+    const item = { id: Math.random().toString(36).slice(2, 12), at: Math.round(at * 10) / 10, text: String(text || "").trim().slice(0, 200) };
+    LS.set("timers", [...timerList(), item].sort((a, b) => a.at - b.at));
+    scheduleTimers();
+    askNotify();
+    return item;
+  }
+  function timerCancel(q) {
+    q = String(q || "").toLowerCase().trim();
+    const list = timerList();
+    let gone;
+    if (["", "все", "всё", "все таймеры", "все напоминания"].includes(q)) gone = list;
+    else if (list.some((x) => x.id === q)) gone = list.filter((x) => x.id === q);
+    else if (/^\d+$/.test(q) && +q >= 1 && +q <= list.length) gone = [list[+q - 1]];
+    else {
+      q = q.replace(/^(таймер|напоминание|про|о|об)\s+/, "");
+      const stems = (q.match(/[\p{L}\p{N}]{3,}/gu) || []).map((w) => w.slice(0, Math.max(4, w.length - 2)));
+      gone = list.filter((x) => stems.length && stems.every((st) => x.text.toLowerCase().replace(/ё/g, "е").includes(st)));
+      if (!gone.length && ["таймер", "напоминание"].includes(q) && list.length === 1) gone = list;
+    }
+    LS.set("timers", list.filter((x) => !gone.includes(x)));
+    scheduleTimers();
+    return gone;
+  }
+  function askNotify() {
+    try {
+      if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+    } catch { /* нет уведомлений */ }
+  }
+  function beep() {
+    try {
+      const ctx = new AudioContext();
+      [0, 0.35, 0.7].forEach((t) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.28);
+        o.connect(g).connect(ctx.destination);
+        o.start(ctx.currentTime + t);
+        o.stop(ctx.currentTime + t + 0.3);
+      });
+      setTimeout(() => ctx.close(), 1500);
+    } catch { /* без звука */ }
+  }
+  function ringTimer(t, late) {
+    const title = (t.text ? "Напоминание" : "Таймер") + (late ? " (пропущено)" : "");
+    const body = t.text || "Время вышло!";
+    beep();
+    try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 600]); } catch { /* нет вибрации */ }
+    try {
+      if ("Notification" in window && Notification.permission === "granted" && navigator.serviceWorker) {
+        navigator.serviceWorker.ready.then((r) => r.showNotification("NOVA — " + title, { body, tag: "nova-" + t.id, icon: "icon-192.png", vibrate: [300, 150, 300] }));
+      }
+    } catch { /* без уведомления — останется сообщение в окне */ }
+    dispatchEvent(new CustomEvent("nova:refresh"));
+  }
+  let timerHandle = 0;
+  function scheduleTimers() {
+    clearTimeout(timerHandle);
+    const list = timerList();
+    if (!list.length) return;
+    const wait = Math.max(0, Math.min(2 ** 31 - 1, (list[0].at - Date.now() / 1000) * 1000));
+    timerHandle = setTimeout(fireTimers, wait);
+  }
+  function fireTimers() {
+    const now = Date.now() / 1000;
+    const list = timerList();
+    const due = list.filter((x) => x.at <= now + 0.5);
+    LS.set("timers", list.filter((x) => x.at > now + 0.5));
+    for (const t of due) ringTimer(t, now - t.at > 90);
+    scheduleTimers();
+  }
+  // вернулись в приложение — сработать то, что пропустили, пока телефон спал
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) fireTimers(); });
+
+  TOOLS.set_timer = async ({ when, text }) => {
+    const at = parseWhen(when);
+    if (at === null) return { error: `Не поняла время «${when}». Примеры: «5 минут», «1 час 30 минут», «в 18:30», «завтра в 9:00».` };
+    if (at - Date.now() / 1000 > 7 * 86400) return { error: "Напоминания — не дальше чем на неделю вперёд." };
+    const item = timerAdd(at, text);
+    return { ok: true, rings_at: clockTime(at), in: sayIn(at - Date.now() / 1000), text: item.text,
+      note: "На телефоне таймер сработает, только пока NOVA открыта — скажи об этом пользователю одной фразой." };
+  };
+  TOOLS.list_timers = async ({ name }) => {
+    const q = String(name || "").toLowerCase().trim();
+    const list = timerList().filter((x) => !q || x.text.toLowerCase().includes(q));
+    if (!list.length) return { timers: [], note: "Таймеров и напоминаний нет." };
+    return { timers: list.map((x, i) => ({ n: i + 1, text: x.text || "таймер", rings_at: clockTime(x.at), left: sayIn(x.at - Date.now() / 1000) })) };
+  };
+  TOOLS.cancel_timer = async ({ which }) => {
+    const gone = timerCancel(which);
+    return gone.length ? { ok: true, cancelled: gone.map((x) => x.text || "таймер") } : { error: "Не нашла такого таймера." };
+  };
+
+  const DUR_SRC = "(?:\\d+(?:[.,]\\d+)?|" + Object.keys(NUM_WORDS).join("|") + ")?\\s*(?:час(?:а|ов)?|ч|минут(?:а|у|ы)?|мин|м|секунд(?:а|у|ы)?|сек|с)";
+  const WHEN_SRC = "(?:через\\s+(?:полчаса|полтора\\s+часа|" + DUR_SRC + "(?:\\s+(?:и\\s+)?" + DUR_SRC + ")*)" +
+    "|(?:завтра\\s+)?в\\s+\\d{1,2}(?:[:.]\\d{2})?(?:\\s*(?:утра|дня|вечера|ночи))?)";
+  function timerCommand(text) {
+    const t = text.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim().replace(/[ .!]+$/, "");
+    let m = t.match(/^(?:поставь\s+|заведи\s+|включи\s+|запусти\s+)?таймер\s+(?:на\s+)?(.+)$/);
+    if (m) {
+      const at = parseWhen(m[1]);
+      if (at === null) return null;
+      timerAdd(at, "");
+      return `⏰ Таймер на **${sayIn(at - Date.now() / 1000)}** — сработает ${clockTime(at)}. На телефоне — пока NOVA открыта.`;
+    }
+    m = t.match(new RegExp("^напомни(?:\\s+мне)?\\s+(" + WHEN_SRC + ")\\s+(.+)$")) ||
+      t.match(new RegExp("^напомни(?:\\s+мне)?\\s+(.+?)\\s+(" + WHEN_SRC + ")$"));
+    if (m) {
+      const first = /^(через|завтра|в\s+\d)/.test(m[1]);
+      const at = parseWhen(first ? m[1] : m[2]);
+      let what = (first ? m[2] : m[1]).replace(/^(что(?:бы)?|что нужно)\s+/, "").trim();
+      if (at === null || at - Date.now() / 1000 > 7 * 86400) return null;
+      const item = timerAdd(at, what[0].toUpperCase() + what.slice(1));
+      return `🔔 Напомню **${clockTime(at)}**: ${item.text}. На телефоне — пока NOVA открыта.`;
+    }
+    if (["какие таймеры", "мои таймеры", "какие напоминания", "мои напоминания", "покажи таймеры", "сколько осталось"].includes(t)) {
+      const list = timerList();
+      if (!list.length) return "Таймеров и напоминаний нет.";
+      return list.map((x) => `- **${clockTime(x.at)}** (через ${sayIn(x.at - Date.now() / 1000)}) — ${x.text || "таймер"}`).join("\n");
+    }
+    m = t.match(/^(?:отмени|убери|удали|выключи|останови|сбрось)\s+(все\s+)?(таймер(?:ы)?|напоминани(?:е|я))(?:\s+(.+))?$/);
+    if (m) {
+      const gone = timerCancel(m[1] ? "все" : (m[3] || m[2]));
+      if (!gone.length) return timerList().length ? null : "Таймеров и напоминаний и так нет.";
+      return "Отменила: " + gone.map((x) => x.text || "таймер").join(", ") + ".";
+    }
+    return null;
+  }
+
+  TOOL_DECLS.push(
+    { name: "remember", description: "Запомнить надолго важный факт о пользователе — он будет известен во всех чатах (имя, учёба, увлечения, проекты, друзья, предпочтения). Не для разовых вещей и не для секретов.",
+      parameters: { type: "OBJECT", properties: { fact: { type: "STRING", description: "один короткий факт от третьего лица, например «Делает игры в Roblox вместе с друзьями»" } }, required: ["fact"] } },
+    { name: "forget", description: "Забыть факт о пользователе из долгой памяти (когда просит забыть или факт устарел).",
+      parameters: { type: "OBJECT", properties: { fact: { type: "STRING", description: "что забыть — часть текста факта или «всё»" } }, required: ["fact"] } },
+    { name: "set_timer", description: "Поставить таймер или напоминание («напомни…», «таймер на…»). На телефоне сработает, пока NOVA открыта.",
+      parameters: { type: "OBJECT", properties: {
+        when: { type: "STRING", description: "через сколько или во сколько: «5 минут», «1 час 30 минут», «в 18:30», «завтра в 9:00»" },
+        text: { type: "STRING", description: "о чём напомнить, коротко (пустая строка — просто таймер)" } }, required: ["when", "text"] } },
+    { name: "list_timers", description: "Какие таймеры и напоминания сейчас поставлены.",
+      parameters: { type: "OBJECT", properties: { name: { type: "STRING", description: "часть текста, чтобы найти одно (пустая строка — все)" } }, required: ["name"] } },
+    { name: "cancel_timer", description: "Отменить таймер или напоминание.",
+      parameters: { type: "OBJECT", properties: { which: { type: "STRING", description: "о чём оно (часть текста), номер из списка или «все»" } }, required: ["which"] } },
+  );
 
   async function runTool(name, args, ctx) {
     const fn = TOOLS[name];
@@ -1171,6 +1522,8 @@
 
   function handleCommand(message) {
     const original = message.trim();
+    const quick = memoryCommand(original) || timerCommand(original); // «запомни…», «таймер на 5 минут»
+    if (quick) return quick;
     const text = original.toLowerCase().replace(/[!. ]+$/, "");
     const go = (url, ok) => (openUrl(url) ? ok : `Открой ссылку сама: ${url}`);
     if (["открой гугл", "открой google", "гугл", "google"].includes(text)) return go("https://www.google.com", "Открываю **Google**.");
@@ -1311,8 +1664,10 @@
     return new Response(stream, { status: 200, headers: { "Content-Type": "application/x-ndjson; charset=utf-8" } });
   }
 
-  async function answer(text, files, emit, signal) {
+  async function answer(text, files, emit, signal, voice = false) {
     busy = true;
+    voiceMode = voice;
+    memFresh = [];
     const chat = current;
     try {
       const base = turnsFromMessages(chat.messages);
@@ -1365,19 +1720,21 @@
       }
       if (!r || (r.kind === "error" && r.fallback)) r = { text: firstFail || (r && r.text) || status(first)[1], kind: "error" };
 
+      if (r.kind === "ai") memAuto(text); // модель не запомнила имя/возраст/город — NOVA сама
       if ((r.kind === "ai" || r.kind === "stopped") && r.text) {
-        record(chat, "ai", r.text, { sources: r.sources, stopped: r.kind === "stopped", note });
+        record(chat, "ai", r.text, { sources: r.sources, stopped: r.kind === "stopped", note, remembered: memFresh });
         const answers = chat.messages.filter((m) => m.role === "ai" && !m.local).length;
         if (r.kind === "ai" && answers === 1) {
           autoTitle(chat, text || "вложения: " + files.map((f) => f.name).join(", "), r.text);
         }
       }
-      emit({ t: "done", kind: r.kind, text: r.text, sources: r.sources || [], note, model: model(), chat: summary(chat) });
+      emit({ t: "done", kind: r.kind, text: r.text, sources: r.sources || [], note, remembered: memFresh, model: model(), chat: summary(chat) });
     } catch (e) {
       console.error("NOVA:", e);
       emit({ t: "done", kind: "error", text: "Что-то пошло не так: " + e.message, sources: [] });
     } finally {
       busy = false;
+      voiceMode = false;
     }
   }
 
@@ -1403,7 +1760,7 @@
         return fail(e.message);
       }
       if (!text && !files.length) return fail("пустое сообщение");
-      return streamResponse((emit) => answer(text, files, emit, signal), signal);
+      return streamResponse((emit) => answer(text, files, emit, signal, !!data.voice), signal);
     }
     if (path === "/api/regenerate") {
       if (busy) return fail("NOVA ещё отвечает", 409);
@@ -1515,8 +1872,21 @@
       lastModel = null;
       return json(await state());
     }
+    if (path === "/api/memory") return json({ facts: memFacts(), enabled: memOn() });
+    if (path === "/api/memory_delete") {
+      memRemove(data.all ? "всё" : String(data.id || "-"));
+      return json({ facts: memFacts() });
+    }
+    if (path === "/api/timer_cancel") {
+      const gone = timerCancel(String(data.id || "-"));
+      return json({ ok: gone.length > 0, timers: timerList() });
+    }
     if (path === "/api/deepseek_key") {
       const key = String(data.key || "").replace(/\s+/g, "");
+      if (/^[A-Za-z0-9+/=]{40,}$/.test(key) && !key.startsWith("sk-")) {
+        return fail("Это ключ GigaChat — он работает только в NOVA на компьютере (Сбер не пускает запросы из браузера). " +
+          "На телефоне для Sonata нужен ключ DeepSeek или OpenRouter (начинается с «sk-»).");
+      }
       if (key.length < 20 || key.length > 200 || !key.startsWith("sk-")) {
         return fail("Это не похоже на ключ DeepSeek или OpenRouter — он начинается с «sk-».");
       }
@@ -1583,4 +1953,7 @@
     const b = document.getElementById("installPill");
     if (b) b.remove();
   });
+
+  // таймеры, поставленные раньше: пропущенные — сразу, остальные — по расписанию
+  setTimeout(fireTimers, 1500);
 })();

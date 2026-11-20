@@ -1,11 +1,15 @@
 # NOVA
 
-Личный ИИ-ассистент для Windows с тремя моделями:
+Личный ИИ-ассистент для Windows с четырьмя моделями:
 
 - **Note** — лёгкая, работает прямо на компьютере, без интернета (Ollama, Qwen3 4B)
 - **Chord** — средняя, тоже на компьютере, умнее и подробнее (Ollama, Qwen3 8B)
+- **Sonata** — сильная, GigaChat от Сбера: в России без VPN, видит картинки и PDF
 - **Symphony** — сильная, Gemini от Google: видит картинки и PDF
 
-Сайт: https://crosshexud.github.io/nova/
+Ещё NOVA открывает и закрывает программы, ставит таймеры и напоминания, помнит важное о пользователе
+и разговаривает голосом.
+
+Сайт: https://crosshexud.github.io/nova/ · версия для телефона: https://crosshexud.github.io/nova/app/
 
 Скачать: [NOVA.zip](NOVA.zip) → распаковать → запустить `Install NOVA.bat`.

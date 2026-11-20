@@ -27,6 +27,9 @@
     zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
     sparkles: '<path d="M12 3l1.9 5.8L20 10.7l-6.1 1.9L12 18.5l-1.9-5.9L4 10.7l6.1-1.9z"/><path d="M19 3v4M17 5h4"/>',
     alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    brain: '<path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/>',
+    phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>',
     cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
     news: '<path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/>',
     coins: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18M7 6h1v4M16.71 13.88l.7.71-2.82 2.82"/>',
@@ -224,10 +227,12 @@
   }
 
   let modalResolve = null;
-  function confirmModal(title, text, okText = "Удалить") {
+  function confirmModal(title, text, okText = "Удалить", { cancelText = "Отмена", danger = true } = {}) {
     $("#modalTitle").textContent = title;
     $("#modalText").textContent = text;
     $("#modalOk").textContent = okText;
+    $("#modalOk").className = "btn " + (danger ? "danger" : "primary");
+    $("#modalCancel").textContent = cancelText;
     els.modal.hidden = false;
     $("#modalOk").focus();
     return new Promise((resolve) => (modalResolve = resolve));
@@ -453,6 +458,8 @@
       settings: st.settings || S.settings, personas: st.personas || S.personas, key: st.key || S.key,
       dskey: st.dskey || S.dskey, groups: st.groups || S.groups,
     });
+    setTimers(st.timers);
+    renderTimers();
     pickVoice();
     renderSidebar();
     renderHeader();
@@ -608,7 +615,7 @@
     if (Object.values(S.modes).some((m) => m.engine === "ollama")) {
       const foot = div("model-menu-foot");
       foot.textContent = "Note и Chord работают прямо на твоём компьютере — без интернета, ключа и лимитов. " +
-        "Если выбранная модель недоступна, NOVA сама ответит другой. Картинки и PDF смотрит Symphony.";
+        "Если выбранная модель недоступна, NOVA сама ответит другой. Картинки и PDF смотрят Symphony и Sonata на GigaChat.";
       menu.append(foot);
     }
     $("#modelBtn", els.modes).addEventListener("click", (e) => {
@@ -670,7 +677,7 @@
         $("div", els.problem).append(b);
       };
       if (engine === "gemini" && S.key && !S.key.set) addButton("Вставить ключ", () => openSettings(true));
-      if (engine === "deepseek" && S.dskey && !S.dskey.set) addButton("Вставить ключ DeepSeek", () => openSettings("ds"));
+      if (engine === "deepseek" && S.dskey && !S.dskey.set) addButton("Вставить ключ для Sonata", () => openSettings("ds"));
       if (engine === "ollama" && /ollama\.com/.test(S.problem)) {
         addButton("Скачать Ollama", () => api("/api/open_url", { url: "https://ollama.com/download" }).catch(() => {}));
       }
@@ -946,6 +953,61 @@
       $(".sources", w).before(n);
     }
 
+    function rememberNote(list) {
+      if (!list || !list.length) return;
+      const n = div("note mem-note");
+      n.innerHTML = icon("brain", 14) + "<span></span>";
+      $("span", n).textContent = "Запомнила: " + list.join("; ");
+      n.title = "Долгая память — посмотреть и удалить можно в ⚙ Настройках";
+      n.addEventListener("click", () => openSettings());
+      $(".sources", w).before(n);
+    }
+
+    // Кнопки подтверждения для компьютера: «Закрыть Roblox» / «Не надо». Без нажатия ничего не случится.
+    function setPcActions(list) {
+      const old = $(".pc-actions", w);
+      if (old) old.remove();
+      if (!list || !list.length) return;
+      const box = div("pc-actions");
+      for (const a of list) {
+        const row = div("pc-action");
+        const settle = (state, text) => {
+          row.className = "pc-action " + state;
+          row.innerHTML = icon(state === "done" ? "check" : state === "declined" ? "x" : "alert", 15) + "<span></span>";
+          $("span", row).textContent = text;
+        };
+        if (a.state && a.state !== "pending") {
+          settle(a.state, a.result || (a.state === "declined" ? "Отменено." : a.label));
+          box.append(row);
+          continue;
+        }
+        const yes = document.createElement("button");
+        yes.type = "button";
+        yes.className = "btn " + (a.danger ? "danger" : "primary");
+        yes.textContent = a.label;
+        const no = document.createElement("button");
+        no.type = "button";
+        no.className = "btn";
+        no.textContent = "Не надо";
+        const press = async (ok) => {
+          yes.disabled = no.disabled = true;
+          if (ok) yes.textContent = "Выполняю…";
+          try {
+            const r = await api("/api/action", { id: a.id, yes: ok });
+            settle(r.ok ? (ok ? "done" : "declined") : "failed", r.text || (ok ? "Готово." : "Отменено."));
+          } catch (e) {
+            settle("failed", "Не получилось: " + e.message);
+          }
+          follow();
+        };
+        yes.addEventListener("click", () => press(true));
+        no.addEventListener("click", () => press(false));
+        row.append(yes, no);
+        box.append(row);
+      }
+      $(".sources", w).before(box);
+    }
+
     function showError(text) {
       const card = div("error-card");
       card.innerHTML = icon("alert", 18) + '<div><div class="err-text"></div><button class="retry" type="button">Повторить</button></div>';
@@ -997,6 +1059,8 @@
         setActions(m.text, m.local);
         if (m.stopped) note("Ответ был остановлен");
         if (m.note) note(m.note); // «Symphony недоступна — ответила Sonata»
+        if (m.actions) setPcActions(m.actions);
+        rememberNote(m.remembered);
       },
       finish(ev) {
         removeThinking();
@@ -1016,12 +1080,14 @@
           if (streamed) settleTail(md);
           markScrollables(md);
           setSources(ev.sources);
-          when(null, ev.model);
+          when(null, ev.by || ev.model); // by — модель, которая ответила на самом деле
           if (finalText) setActions(finalText, kind === "command");
           if (kind === "stopped") note(finalText ? "Ответ остановлен" : "Остановлено");
           if (ev.note) note(ev.note);
+          if (ev.actions && ev.actions.length) setPcActions(ev.actions);
+          rememberNote(ev.remembered);
           follow();
-          if (kind === "ai" && S.settings.auto_speak) {
+          if (kind === "ai" && S.settings.auto_speak && !call.on) {
             const btn = $(".act-speak", w);
             if (btn) speak(finalText, btn);
           }
@@ -1267,13 +1333,90 @@
     renderHeader();
   }
 
+  // ---------- таймеры и напоминания: значок в шапке с обратным отсчётом ----------
+  function fmtLeft(sec) {
+    sec = Math.max(0, Math.round(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    const two = (n) => String(n).padStart(2, "0");
+    return h ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`;
+  }
+  function timerWhen(at) {
+    const d = new Date(at * 1000), now = new Date();
+    const hm = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) return "в " + hm;
+    const tmr = new Date(now.getTime() + 864e5);
+    return (d.toDateString() === tmr.toDateString() ? "завтра в " : d.toLocaleDateString("ru-RU") + " в ") + hm;
+  }
+  function renderTimers() {
+    const wrap = $("#timerWrap");
+    if (!wrap) return;
+    const now = Date.now() / 1000;
+    const list = (S.timers || []).filter((t) => t.at > now - 1);
+    wrap.hidden = !list.length;
+    const menu = $("#timerMenu");
+    if (!list.length) {
+      menu.hidden = true;
+      return;
+    }
+    const t = list[0];
+    const pill = $("#timerPill");
+    pill.classList.toggle("soon", t.at - now < 60);
+    pill.innerHTML = icon("bell", 15) + "<b></b><span></span>";
+    $("b", pill).textContent = fmtLeft(t.at - now);
+    $("span", pill).textContent = (t.text ? " · " + t.text : "") + (list.length > 1 ? `  +${list.length - 1}` : "");
+    if (menu.hidden) return;
+    menu.replaceChildren();
+    for (const x of list) {
+      const row = div("timer-row");
+      row.innerHTML = '<div><b></b><small></small></div><button class="icon-btn" type="button" title="Отменить"></button>';
+      $("b", row).textContent = x.text || "Таймер";
+      $("small", row).textContent = `${timerWhen(x.at)} · через ${fmtLeft(x.at - now)}`;
+      const del = $("button", row);
+      del.innerHTML = icon("x", 14);
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+          const r = await api("/api/timer_cancel", { id: x.id });
+          S.timers = r.timers || [];
+          toast("Отменено: " + (x.text || "таймер"));
+        } catch (err) {
+          toast("Не получилось отменить: " + err.message, "error");
+        }
+        renderTimers();
+      });
+      menu.append(row);
+    }
+  }
+  // Новый список таймеров (с сервера или из телефона). Если какой-то пропал, потому что уже сработал, — сказать.
+  function setTimers(list) {
+    const now = Date.now() / 1000;
+    const fresh = new Set((list || []).map((t) => t.id));
+    for (const t of S.timers || []) {
+      if (!fresh.has(t.id) && t.at <= now + 1.5) toast("⏰ " + (t.text || "Таймер: время вышло!"));
+    }
+    S.timers = list || [];
+  }
+
+  function tickTimers() {
+    const now = Date.now() / 1000;
+    const due = (S.timers || []).filter((t) => t.at <= now);
+    if (due.length) {
+      S.timers = S.timers.filter((t) => t.at > now);
+      due.forEach((t) => toast("⏰ " + (t.text || "Таймер: время вышло!")));
+      setTimeout(syncState, 2000); // «Ещё 5 минут» в окошке — новый таймер придёт с сервера
+    }
+    if (S.timers && S.timers.length) renderTimers();
+  }
+
   async function syncState() {
     try {
       const st = await api("/api/state");
       Object.assign(S, { chats: st.chats, current: st.current, model: st.model });
+      setTimers(st.timers);
       renderSidebar();
       renderHeader();
       renderStatus();
+      renderTimers();
     } catch { /* связь пропала — покажет пинг */ }
   }
 
@@ -1286,15 +1429,57 @@
     });
   }
 
-  async function send(text, { regenerate = false } = {}) {
+  // «Кто это?» про картинку. GigaChat (Sonata) плохо узнаёт персонажей и людей — на такой вопрос
+  // NOVA предлагает спросить Symphony (Gemini) один раз, не меняя выбранную модель.
+  const WHO_RE = new RegExp(
+    "(?:^|[^а-яёa-z])(?:" +
+      "кто\\s+(?:это|эт[оа]|там|он|она|так(?:ой|ая|ие)|изображ|нарисован|на\\s+(?:фото|фотк|картинк|изображ|скрин|аватар|рисунк|арт))" +
+      "|как\\s+(?:его|её|ее|их)\\s+зовут|(?:его|её|ее)\\s+имя|имя\\s+(?:его|её|ее|персонажа)" +
+      "|что\\s+за\\s+(?:персонаж|перс|чел|человек|герой)|из\\s+какого\\s+(?:аниме|мульт|сериал|фильм|игр|фандом|комикс)" +
+      "|откуда\\s+(?:он|она|этот|эта|персонаж)|узна[её]шь|who\\s+is|who's)",
+    "i"
+  );
+  function lastUserHadImage() {
+    const msgs = (S.current && S.current.messages) || [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "user" && !msgs[i].local) return (msgs[i].files || []).some((f) => f.kind === "image");
+    }
+    return false;
+  }
+  function whoAsksSymphony(text) {
+    const son = S.modes.sonata, sym = S.modes.symphony;
+    if (S.mode !== "sonata" || !son || !son.sees || !sym || !sym.available) return false;
+    if (!WHO_RE.test((text || "").toLowerCase())) return false;
+    return S.pending.some((f) => f.kind === "image") || lastUserHadImage();
+  }
+
+  async function send(text, { regenerate = false, voice = false } = {}) {
     text = (text || "").trim();
-    if (S.busy || (!text && !S.pending.length && !regenerate)) return;
+    if (S.busy || S.asking || (!text && !S.pending.length && !regenerate)) return;
+    let once = "";
+    if (!regenerate && !voice && whoAsksSymphony(text)) {
+      S.asking = true;
+      try {
+        const yes = await confirmModal(
+          "Кто на картинке?",
+          "Sonata плохо узнаёт персонажей и людей. Symphony (Gemini) узнаёт намного лучше — спросить её " +
+            "только про это сообщение? Выбранная модель не поменяется, а если Symphony недоступна, ответит Sonata.",
+          "Спросить Symphony",
+          { cancelText: "Пусть ответит Sonata", danger: false }
+        );
+        if (yes) once = "symphony";
+      } finally {
+        S.asking = false;
+      }
+    }
     const files = regenerate ? [] : S.pending.splice(0);
     renderTray();
     stopSpeaking();
     showWelcome(false);
+    let userEl = null;
     if (!regenerate) {
-      els.thread.append(userMsg(text, files));
+      userEl = userMsg(text, files);
+      els.thread.append(userEl);
       els.input.value = "";
       autosize();
     }
@@ -1307,9 +1492,11 @@
     const controller = new AbortController();
     S.controller = controller;
     let finished = false;
+    let result = null; // чем кончился ответ — голосовому разговору нужно, что сказать вслух
     const done = (ev) => {
       if (!finished) {
         finished = true;
+        result = ev;
         ai.finish(ev);
       }
     };
@@ -1322,7 +1509,7 @@
       const res = await fetch(regenerate ? "/api/regenerate" : "/api/send", {
         method: "POST",
         headers: { "X-Nova-Token": TOKEN, "Content-Type": "application/json" },
-        body: JSON.stringify({ text, attachments }),
+        body: JSON.stringify({ text, attachments, once, voice }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -1332,6 +1519,11 @@
       }
       await readLines(res, (ev) => {
         if (ev.t === "chat") touchChat(ev.chat);
+        else if (ev.t === "attach" && userEl) {
+          // NOVA сама приложила скриншот экрана — показать его в сообщении пользователя
+          const shot = $(".msg-files", userMsg("", ev.files));
+          if (shot) userEl.prepend(shot);
+        }
         else if (ev.t === "status") ai.status(ev.text);
         else if (ev.t === "delta") ai.push(ev.text);
         else if (ev.t === "reset") {
@@ -1358,6 +1550,7 @@
       const answers = S.current ? S.current.messages.filter((m) => m.role === "ai" && !m.local).length : 0;
       if (answers === 1) setTimeout(syncState, 2500);
     }
+    return result;
   }
 
   function stop() {
@@ -1537,15 +1730,7 @@
     if (speakingBtn === btn) return stopSpeaking();
     stopSpeaking();
     // длинный текст — по предложениям: так браузер не обрывает озвучку на середине
-    const chunks = [];
-    let cur = "";
-    for (const part of MD.plain(text).split(/(?<=[.!?…])\s+/)) {
-      if ((cur + " " + part).length > 220 && cur) {
-        chunks.push(cur);
-        cur = part;
-      } else cur = cur ? cur + " " + part : part;
-    }
-    if (cur) chunks.push(cur);
+    const chunks = speechChunks(text);
     if (!chunks.length) return;
     speakingBtn = btn;
     setSpeakBtn(btn, true);
@@ -1724,6 +1909,202 @@
     }
   }
 
+  // ---------- голосовой разговор («звонок»): слушает → отвечает голосом → снова слушает ----------
+
+  const call = { on: false, state: "", rec: null, quiet: 0, meter: null, err: null };
+
+  function callUI(state, text) {
+    call.state = state;
+    const box = $("#call");
+    box.dataset.state = state;
+    $("#callState").textContent = text;
+  }
+
+  function localVoice() {
+    const ru = synth ? synth.getVoices().filter((v) => v.lang && v.lang.toLowerCase().startsWith("ru")) : [];
+    return ru.find((v) => v.localService) || null;
+  }
+
+  function speechChunks(text) {
+    const chunks = [];
+    let cur = "";
+    // эмодзи голос читает словами («улыбающееся лицо») — убираем
+    const plain = MD.plain(text).replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]/gu, "").replace(/[ \t]{2,}/g, " ");
+    for (const part of plain.split(/(?<=[.!?…])\s+/)) {
+      if ((cur + " " + part).length > 220 && cur) {
+        chunks.push(cur);
+        cur = part;
+      } else cur = cur ? cur + " " + part : part;
+    }
+    if (cur) chunks.push(cur);
+    return chunks;
+  }
+
+  // Прочитать вслух по кусочкам; без интернета онлайн-голос не работает — тогда голос Windows.
+  function sayAloud(text) {
+    return new Promise((resolve) => {
+      synth.cancel();
+      const chunks = speechChunks(text);
+      let i = 0;
+      const next = (useLocal) => {
+        if (!call.on || i >= chunks.length) return resolve();
+        const v = useLocal ? localVoice() : voice;
+        const u = new SpeechSynthesisUtterance(chunks[i]);
+        u.lang = v ? v.lang : "ru-RU";
+        if (v) u.voice = v;
+        u.rate = S.settings.rate || 1.05;
+        u.onend = () => {
+          i++;
+          next(useLocal);
+        };
+        u.onerror = (e) => {
+          if (e.error === "interrupted" || e.error === "canceled") return resolve();
+          if (!useLocal && localVoice() && localVoice() !== voice) return next(true);
+          i++;
+          next(useLocal);
+        };
+        synth.speak(u);
+      };
+      next(false);
+    });
+  }
+
+  async function startMeter() {
+    try {
+      const ctx = new AudioContext();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      if (!call.on) {
+        stream.getTracks().forEach((t) => t.stop());
+        ctx.close();
+        return;
+      }
+      const an = ctx.createAnalyser();
+      an.fftSize = 256;
+      ctx.createMediaStreamSource(stream).connect(an);
+      const data = new Uint8Array(an.frequencyBinCount);
+      const m = (call.meter = { ctx, stream, raf: 0, s: 0 });
+      const loop = () => {
+        if (call.meter !== m) return;
+        an.getByteFrequencyData(data);
+        let sum = 0;
+        for (let k = 2; k < 48; k++) sum += data[k];
+        const lvl = call.state === "listening" ? Math.min(1, sum / 46 / 120) : 0;
+        m.s += (lvl - m.s) * (lvl > m.s ? 0.5 : 0.12);
+        $("#call").style.setProperty("--lvl", m.s.toFixed(3));
+        m.raf = requestAnimationFrame(loop);
+      };
+      loop();
+    } catch { /* нет доступа к звуку — шар просто дышит */ }
+  }
+
+  function stopMeter() {
+    const m = call.meter;
+    call.meter = null;
+    if (!m) return;
+    cancelAnimationFrame(m.raf);
+    m.stream.getTracks().forEach((t) => t.stop());
+    m.ctx.close().catch(() => {});
+  }
+
+  function openCall() {
+    if (!Recognition || !synth) return toast("Голосовой разговор здесь не работает — нужен браузер Edge или Chrome", "error");
+    if (S.busy) return toast("Подожди, NOVA ещё отвечает");
+    stopSpeaking();
+    if (rec) rec.stop();
+    Object.assign(call, { on: true, quiet: 0, err: null });
+    $("#callHeard").textContent = "";
+    $("#callSaid").textContent = "";
+    $("#call").hidden = false;
+    startMeter();
+    callListen();
+  }
+
+  function closeCall() {
+    call.on = false;
+    if (call.rec) {
+      try { call.rec.abort(); } catch { /* уже остановлено */ }
+      call.rec = null;
+    }
+    if (synth) synth.cancel();
+    stopMeter();
+    if (S.busy && S.controller) S.controller.abort();
+    $("#call").hidden = true;
+    els.input.focus();
+  }
+
+  function callListen() {
+    if (!call.on) return;
+    callUI("listening", "Слушаю…");
+    const r = new Recognition();
+    call.rec = r;
+    r.lang = "ru-RU";
+    r.interimResults = true;
+    r.continuous = false;
+    let final = "", interim = "";
+    r.onresult = (e) => {
+      final = "";
+      interim = "";
+      for (const x of e.results) {
+        if (x.isFinal) final += x[0].transcript;
+        else interim += x[0].transcript;
+      }
+      $("#callHeard").textContent = (final + interim).trim();
+    };
+    r.onerror = (e) => {
+      if (["not-allowed", "service-not-allowed", "audio-capture", "network"].includes(e.error)) call.err = e.error;
+    };
+    r.onend = () => {
+      if (call.rec !== r) return;
+      call.rec = null;
+      if (!call.on) return;
+      if (call.err) {
+        const msg = {
+          "not-allowed": "Нет доступа к микрофону — разреши его вверху окна",
+          "service-not-allowed": "Нет доступа к микрофону — разреши его вверху окна",
+          "audio-capture": "Не нашла микрофон",
+          "network": "Распознавание речи без интернета не работает",
+        }[call.err];
+        call.err = null;
+        return callUI("paused", msg + ". Нажми на шар, чтобы попробовать ещё раз");
+      }
+      const said = (final || interim).trim();
+      if (said) {
+        call.quiet = 0;
+        callThink(said);
+      } else if (++call.quiet >= 4) callUI("paused", "Я тут. Нажми на шар, когда захочешь продолжить");
+      else callListen();
+    };
+    try {
+      r.start();
+    } catch {
+      callUI("paused", "Не получилось включить микрофон. Нажми на шар, чтобы попробовать ещё раз");
+    }
+  }
+
+  async function callThink(text) {
+    callUI("thinking", "Думаю…");
+    $("#callHeard").textContent = text;
+    $("#callSaid").textContent = "";
+    const ev = await send(text, { voice: true });
+    if (!call.on) return;
+    let answer = ev && ev.text ? ev.text : "";
+    if (!ev || ev.kind === "error") answer = "Не получилось ответить. " + (answer || "Попробуй ещё раз.");
+    if (ev && ev.kind === "stopped") return callListen();
+    callUI("speaking", "Говорю… нажми на шар, чтобы перебить");
+    $("#callSaid").textContent = MD.plain(answer).slice(0, 260);
+    await sayAloud(answer);
+    if (call.on) callListen();
+  }
+
+  function callOrbClick() {
+    if (call.state === "speaking") synth.cancel(); // перебили — сразу слушаем
+    else if (call.state === "listening" && call.rec) call.rec.stop(); // договорил — отправить сразу
+    else if (call.state === "paused") {
+      call.quiet = 0;
+      callListen();
+    }
+  }
+
   // ---------- настройки ----------
 
   let savePatch = {};
@@ -1836,7 +2217,9 @@
     }
   }
 
-  // ---------- ключ DeepSeek для Sonata ----------
+  // ---------- ключ для Sonata (GigaChat, DeepSeek или OpenRouter) ----------
+
+  const SONATA_PROVIDERS = { gigachat: "GigaChat от Сбера", openrouter: "DeepSeek через OpenRouter", deepseek: "DeepSeek" };
 
   function renderDsStatus() {
     const k = S.dskey || {};
@@ -1844,7 +2227,7 @@
     els.dsStatus.innerHTML = icon(k.set ? "check" : "alert", 15) + "<span></span>";
     $("span", els.dsStatus).textContent = !k.set
       ? "Ключ не задан — Sonata не работает"
-      : `Ключ сохранён (${k.hint})` + (k.provider === "openrouter" ? " · DeepSeek через OpenRouter" : " · DeepSeek");
+      : `Ключ сохранён (${k.hint}) · ${SONATA_PROVIDERS[k.provider] || "DeepSeek"}`;
   }
 
   async function saveDsKey() {
@@ -1867,9 +2250,49 @@
     }
   }
 
+  // ---------- долгая память в настройках ----------
+  async function loadMemory() {
+    const box = $("#memList");
+    if (!box) return;
+    let r;
+    try {
+      r = await api("/api/memory");
+    } catch {
+      return;
+    }
+    $("#setMemory").checked = r.enabled !== false;
+    box.replaceChildren();
+    const list = r.facts || [];
+    $("#memClearRow").hidden = !list.length;
+    if (!list.length) {
+      const empty = div("mem-empty");
+      empty.textContent = "Пока пусто. Расскажи NOVA о себе или напиши «запомни, что …».";
+      box.append(empty);
+      return;
+    }
+    for (const f of list.slice().reverse()) {
+      const row = div("mem-row");
+      row.innerHTML = icon("brain", 15) + '<span></span><button class="icon-btn" type="button" title="Забыть"></button>';
+      $("span", row).textContent = f.text;
+      const del = $("button", row);
+      del.innerHTML = icon("x", 14);
+      del.addEventListener("click", async () => {
+        try {
+          await api("/api/memory_delete", { id: f.id });
+          row.remove();
+          if (!box.querySelector(".mem-row")) loadMemory();
+        } catch (e) {
+          toast("Не получилось: " + e.message, "error");
+        }
+      });
+      box.append(row);
+    }
+  }
+
   function openSettings(focusKey = false) {
     closeMobileSidebar();
     fillSettings();
+    loadMemory();
     renderKeyStatus();
     renderDsStatus();
     els.settings.hidden = false;
@@ -1904,6 +2327,17 @@
     els.setCity.addEventListener("input", () => queueSave({ city: els.setCity.value.trim() }, 600));
     els.setCustom.addEventListener("input", () => queueSave({ custom: els.setCustom.value }, 800));
     els.setAutoSpeak.addEventListener("change", () => queueSave({ auto_speak: els.setAutoSpeak.checked }));
+    $("#setMemory").addEventListener("change", (e) => queueSave({ memory: e.target.checked }));
+    $("#memClear").addEventListener("click", async () => {
+      if (!(await confirmModal("Забыть всё?", "NOVA забудет всё, что запомнила о тебе. Чаты останутся.", "Забыть всё"))) return;
+      try {
+        await api("/api/memory_delete", { all: true });
+        toast("Память очищена");
+      } catch (e) {
+        toast("Не получилось: " + e.message, "error");
+      }
+      loadMemory();
+    });
     els.setVoiceSend.addEventListener("change", () => queueSave({ voice_send: els.setVoiceSend.checked }));
     els.setVoice.addEventListener("change", () => {
       queueSave({ voice: els.setVoice.value });
@@ -2202,6 +2636,7 @@
       if (e.key === "Escape") {
         if (!els.lightbox.hidden) return (els.lightbox.hidden = true);
         if (!els.modal.hidden) return closeModal(false);
+        if (call.on) return closeCall();
         if (modelMenu() && !modelMenu().hidden) return closeModelMenu();
         if (!els.chatMenu.hidden) return closeChatMenu();
         if (!els.roleModal.hidden) return closeRoleModal();
@@ -2246,6 +2681,21 @@
     }
     ping();
     setInterval(ping, 15000);
+    setInterval(tickTimers, 1000);
+    if (Recognition && synth) {
+      $("#callBtn").addEventListener("click", openCall);
+      $("#callOrb").addEventListener("click", callOrbClick);
+      $("#callEnd").addEventListener("click", closeCall);
+    } else $("#callBtn").hidden = true;
+    $("#timerPill").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const menu = $("#timerMenu");
+      menu.hidden = !menu.hidden;
+      renderTimers();
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#timerWrap")) $("#timerMenu").hidden = true;
+    });
     // версия для телефона сообщает, что что-то поменялось само (например, пришло название чата)
     addEventListener("nova:refresh", () => { if (!S.busy) syncState(); });
     // таблицы и код, которые листаются вбок: гасим край, пока не долистали до конца

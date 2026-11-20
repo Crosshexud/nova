@@ -76,6 +76,10 @@
             <button type="button" data-act="delete" data-needs-messages class="danger"><span data-icon="trash"></span>Удалить чат</button>
           </div>
         </div>
+        <div class="timer-wrap" id="timerWrap" hidden>
+          <button class="timer-pill" id="timerPill" type="button" title="Таймеры и напоминания"></button>
+          <div class="menu timer-menu" id="timerMenu" hidden></div>
+        </div>
         <div class="mode-switch" id="modeSwitch" role="tablist" aria-label="Режим"></div>
       </header>
 
@@ -105,6 +109,7 @@
           <div class="composer-row">
             <button class="icon-btn attach" id="attachBtn" type="button" title="Прикрепить картинку или файл" data-icon="paperclip"></button>
             <textarea id="input" rows="1" placeholder="Спроси NOVA…" spellcheck="true"></textarea>
+            <button class="icon-btn call-btn" id="callBtn" type="button" title="Голосовой разговор — как звонок" data-icon="phone"></button>
             <button class="icon-btn mic" id="micBtn" type="button" title="Сказать голосом" data-icon="mic"></button>
             <button class="send" id="sendBtn" type="button" title="Отправить (Enter)" data-icon="arrowUp" disabled></button>
           </div>
@@ -148,15 +153,17 @@
         </section>
 
         <section id="dsSection">
-          <h4>Ключ DeepSeek — для Sonata</h4>
+          <h4>Ключ для Sonata</h4>
           <div class="key-status" id="dsStatus"></div>
           <div class="key-row">
-            <input id="dsInput" type="password" placeholder="Ключ DeepSeek или OpenRouter (sk-…)" autocomplete="off" spellcheck="false">
+            <input id="dsInput" type="password" placeholder="Ключ DeepSeek или OpenRouter «sk-…»" autocomplete="off" spellcheck="false">
             <button class="btn primary" id="dsSave" type="button">Проверить и сохранить</button>
           </div>
-          <p class="key-help">Sonata работает в России без VPN. Ключ: <a href="https://platform.deepseek.com/api_keys" data-ext>platform.deepseek.com</a>
-            (платно, но дёшево) или <a href="https://openrouter.ai/keys" data-ext>openrouter.ai</a> (там DeepSeek бывает бесплатно,
-            около 50 ответов в день). Он хранится только на этом телефоне.</p>
+          <p class="key-help">На телефоне Sonata — это DeepSeek: нужен ключ DeepSeek или OpenRouter (начинается с «sk-»). Ключ GigaChat работает только в NOVA на компьютере — Сбер не пускает запросы из браузера.
+            
+            
+            Где взять: <a href="https://platform.deepseek.com/api_keys" data-ext>DeepSeek</a> или
+            <a href="https://openrouter.ai/keys" data-ext>OpenRouter</a>. Ключ хранится только на этом телефоне.</p>
         </section>
 
         <section>
@@ -166,6 +173,19 @@
               <input id="setName" type="text" maxlength="40" placeholder="NOVA будет так к тебе обращаться" autocomplete="off"></label>
             <label class="field"><span>Твой город</span>
               <input id="setCity" type="text" maxlength="60" placeholder="Для погоды, если город не назван" autocomplete="off"></label>
+          </div>
+        </section>
+
+        <section id="memSection">
+          <h4>Память</h4>
+          <label class="toggle-row">
+            <span><b>Запоминать важное обо мне</b><small>Учёба, увлечения, проекты, друзья — NOVA помнит это во всех чатах. Пароли и карты не запоминает.</small></span>
+            <input type="checkbox" class="switch" id="setMemory">
+          </label>
+          <div class="mem-list" id="memList"></div>
+          <div class="toggle-row" id="memClearRow">
+            <span><b>Забыть всё</b><small>Можно и по одному — крестиком, или словами «забудь …»</small></span>
+            <button class="btn danger" id="memClear" type="button">Забыть всё</button>
           </div>
         </section>
 
@@ -236,6 +256,17 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="call" id="call" hidden data-state="listening">
+    <div class="call-top"><span class="call-dot"></span>Голосовой разговор с NOVA</div>
+    <button class="call-orb" id="callOrb" type="button" title="Нажми, чтобы перебить NOVA или сразу отправить сказанное">
+      <span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span><span class="core"></span>
+    </button>
+    <div class="call-state" id="callState">Слушаю…</div>
+    <div class="call-heard" id="callHeard"></div>
+    <div class="call-said" id="callSaid"></div>
+    <button class="call-end" id="callEnd" type="button"><span data-icon="phone"></span>Закончить</button>
   </div>
 
   <div class="modal" id="modal" hidden>

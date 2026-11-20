@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NOVA — ИИ-ассистент для Windows</title>
-<meta name="description" content="Личный ИИ-ассистент для Windows с тремя моделями: Note и Chord работают на твоём компьютере без интернета, Symphony подключает Gemini от Google. Бесплатно.">
+<meta name="description" content="Личный ИИ-ассистент для Windows с четырьмя моделями: Note и Chord работают на твоём компьютере без интернета, Sonata (GigaChat) — в России без VPN, Symphony подключает Gemini. Управляет компьютером, ставит таймеры, помнит важное и разговаривает голосом. Бесплатно.">
 <meta name="theme-color" content="#06070e">
 <meta property="og:type" content="website">
-<meta property="og:title" content="NOVA — три нейросети, две без интернета">
-<meta property="og:description" content="Личный ИИ-ассистент для Windows: Note и Chord работают прямо на видеокарте, Symphony видит картинки и PDF. Бесплатно.">
+<meta property="og:title" content="NOVA — четыре нейросети, две без интернета">
+<meta property="og:description" content="Личный ИИ-ассистент для Windows: Note и Chord работают прямо на видеокарте, Sonata и Symphony видят картинки и PDF. Открывает программы, ставит таймеры, помнит важное. Бесплатно.">
 <meta property="og:url" content="https://crosshexud.github.io/nova/">
 <meta property="og:image" content="https://crosshexud.github.io/nova/img/chat.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -34,6 +34,7 @@
   --indigo: #6366f1;
   --note: #7dd3fc;      /* Note — холодная голубая искра */
   --chord: #a78bfa;     /* Chord — фирменный фиолетовый */
+  --sonata: #6ee7b7;    /* Sonata — мятная, как у Сбера */
   --symphony: #f0abfc;  /* Symphony — тёплый розовый */
   --ok: #34d399;
   --warn: #fbbf24;
@@ -207,7 +208,8 @@ section { padding-block: 76px; }
 .section-head { display: grid; gap: 14px; margin-bottom: 40px; max-width: 780px; }
 
 /* ---------- три модели ---------- */
-.models { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.models { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 1200px) { .models { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .model {
   --c: var(--chord);
   position: relative;
@@ -221,6 +223,7 @@ section { padding-block: 76px; }
   overflow: hidden;
 }
 .model.note { --c: var(--note); }
+.model.sonata { --c: var(--sonata); }
 .model.symphony { --c: var(--symphony); }
 .model::after {
   /* орбита модели: у лёгкой маленькая, у сильной большая */
@@ -238,6 +241,7 @@ section { padding-block: 76px; }
 }
 .model.note { --o: 120px; }
 .model.chord { --o: 180px; }
+.model.sonata { --o: 210px; }
 .model.symphony { --o: 240px; }
 .model-top { display: flex; align-items: center; gap: 14px; }
 .m-icon { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); flex-shrink: 0; }
@@ -273,6 +277,7 @@ thead th { font: 700 15px var(--font-body); background: var(--space-3); }
 thead th span { display: block; font: 500 10.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
 thead th.note { color: var(--note); }
 thead th.chord { color: var(--chord); }
+thead th.sonata { color: var(--sonata); }
 thead th.symphony { color: var(--symphony); }
 td:first-child { color: var(--text-2); }
 td.c { text-align: center; width: 15%; }
@@ -310,6 +315,7 @@ th.c { text-align: center; }
   transition: background .3s;
 }
 .pick-result[data-model="note"] { --c: var(--note); }
+.pick-result[data-model="sonata"] { --c: var(--sonata); }
 .pick-result[data-model="symphony"] { --c: var(--symphony); }
 .pick-result .eyebrow { color: var(--c); }
 .pick-name { display: flex; align-items: center; gap: 14px; }
@@ -441,6 +447,7 @@ th.c { text-align: center; }
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="18" r="4"/><path d="M12 18V2l7 4"/></symbol>
   <symbol id="i-chord" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-sonata" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="18" r="3"/><path d="M10 18V4c2 2.2 6 2.6 8 5.5"/><path d="M10 9.5c2 2.2 6 2.6 8 5.5"/></symbol>
   <symbol id="i-symphony" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><path d="m9 9 12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
 </svg>
@@ -470,12 +477,12 @@ th.c { text-align: center; }
   <div class="wrap hero">
     <div>
       <span class="eyebrow">ИИ-ассистент для Windows · бесплатно</span>
-      <h1>Три нейросети.<br><em>Две без интернета.</em></h1>
-      <p class="lead">Note и Chord думают прямо на твоей видеокарте: без интернета, ключей и лимитов. Symphony подключает Gemini от Google, когда нужно посмотреть картинку или PDF. Чаты хранятся только у тебя на компьютере.</p>
+      <h1>Четыре нейросети.<br><em>Две без интернета.</em></h1>
+      <p class="lead">Note и Chord думают прямо на твоей видеокарте: без интернета, ключей и лимитов. Sonata (GigaChat от Сбера) работает в России без VPN, Symphony подключает Gemini от Google. NOVA открывает программы, ставит таймеры, помнит важное о тебе и разговаривает голосом. Чаты хранятся только у тебя на компьютере.</p>
       <div class="hero-actions">
         <a class="btn primary" href="NOVA.zip" download>
           <svg aria-hidden="true"><use href="#i-download"/></svg>
-          Скачать NOVA <small>.zip · 115 КБ</small>
+          Скачать NOVA <small>.zip · 162 КБ</small>
         </a>
         <a class="btn" href="app/">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
@@ -486,11 +493,11 @@ th.c { text-align: center; }
         <span>Windows 10 или 11</span>
         <span>Python 3.10+</span>
         <span>Ollama для Note и Chord</span>
-        <span>Ключ Gemini для Symphony</span>
+        <span>Ключ GigaChat для Sonata или Gemini для Symphony</span>
       </div>
     </div>
     <div class="orbit-box">
-      <svg viewBox="0 0 540 420" role="img" aria-label="Три орбиты вокруг ядра NOVA: Note, Chord и Symphony">
+      <svg viewBox="0 0 540 420" role="img" aria-label="Четыре орбиты вокруг ядра NOVA: Note, Chord, Sonata и Symphony">
         <defs>
           <radialGradient id="glow"><stop offset="0" stop-color="#c4b5fd" stop-opacity=".85"/><stop offset=".55" stop-color="#8b5cf6" stop-opacity=".2"/><stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/></radialGradient>
           <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4b5fd"/><stop offset=".5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#6366f1"/></linearGradient>
@@ -499,6 +506,8 @@ th.c { text-align: center; }
         <g transform="rotate(-14 270 210)">
           <!-- Symphony: большая медленная орбита -->
           <ellipse cx="270" cy="210" rx="250" ry="92" fill="none" stroke="#f0abfc" stroke-opacity=".38" stroke-width="1.6" stroke-dasharray="2 7" stroke-linecap="round"/>
+          <!-- Sonata -->
+          <ellipse cx="270" cy="210" rx="210" ry="77" fill="none" stroke="#6ee7b7" stroke-opacity=".45" stroke-width="1.8"/>
           <!-- Chord -->
           <ellipse cx="270" cy="210" rx="170" ry="62" fill="none" stroke="#a78bfa" stroke-opacity=".6" stroke-width="2"/>
           <!-- Note: маленькая быстрая -->
@@ -519,13 +528,18 @@ th.c { text-align: center; }
             <g transform="rotate(14)"><text x="13" y="-11" fill="#c4b5fd">Chord</text></g>
           </g>
           <g>
+            <animateMotion dur="17s" begin="-2s" repeatCount="indefinite" path="M480 210 A210 77 0 1 1 60 210 A210 77 0 1 1 480 210"/>
+            <circle r="9" fill="#6ee7b7"/>
+            <g transform="rotate(14)"><text x="14" y="-12" fill="#6ee7b7">Sonata</text></g>
+          </g>
+          <g>
             <animateMotion dur="22s" begin="-15s" repeatCount="indefinite" path="M520 210 A250 92 0 1 1 20 210 A250 92 0 1 1 520 210"/>
             <circle r="10" fill="#f0abfc"/>
             <circle r="17" fill="none" stroke="#f0abfc" stroke-opacity=".35"/>
             <g transform="rotate(14)"><text x="16" y="-13" fill="#f0abfc">Symphony</text></g>
           </g>
         </g>
-        <text class="tag" x="270" y="404" text-anchor="middle" fill="#8a85a6">на твоём ПК · на твоём ПК · в облаке Google</text>
+        <text class="tag" x="270" y="404" text-anchor="middle" fill="#8a85a6">на твоём ПК · на твоём ПК · у Сбера · в облаке Google</text>
       </svg>
     </div>
   </div>
@@ -546,7 +560,7 @@ th.c { text-align: center; }
   <section id="models" class="wrap">
     <div class="section-head">
       <span class="eyebrow">Модели</span>
-      <h2>Нота, аккорд и симфония</h2>
+      <h2>Нота, аккорд, соната и симфония</h2>
       <p class="lead">Названия не случайные: от одной ноты до целого оркестра. Чем больше модель, тем подробнее и умнее ответы.</p>
     </div>
 
@@ -583,6 +597,22 @@ th.c { text-align: center; }
         <p class="foot-note">Модель Qwen3 8B. На RTX 2060 Super печатает около 47 токенов в секунду.</p>
       </article>
 
+      <article class="model sonata">
+        <div class="model-top">
+          <span class="m-icon"><svg aria-hidden="true"><use href="#i-sonata"/></svg></span>
+          <div><span class="kind">сильная</span><h3>Sonata</h3></div>
+        </div>
+        <p>Умная и работает в России без VPN. Видит картинки, скриншоты и PDF, ищет в интернете.</p>
+        <dl class="facts">
+          <div><dt>Где работает</dt><dd>серверы Сбера</dd></div>
+          <div><dt>Интернет</dt><dd class="need">нужен</dd></div>
+          <div><dt>VPN в России</dt><dd class="yes">не нужен</dd></div>
+          <div><dt>Скачать</dt><dd>ничего</dd></div>
+          <div><dt>Видеокарта</dt><dd>любая</dd></div>
+        </dl>
+        <p class="foot-note">GigaChat от Сбера, бесплатный ключ для физлиц.</p>
+      </article>
+
       <article class="model symphony">
         <div class="model-top">
           <span class="m-icon"><svg aria-hidden="true"><use href="#i-symphony"/></svg></span>
@@ -601,13 +631,14 @@ th.c { text-align: center; }
     </div>
 
     <div class="switch-row">
-      <div class="switch-shot"><img src="img/model-menu.png" width="512" height="464" alt="Меню выбора модели в NOVA: Note, Chord и Symphony"></div>
+      <div class="switch-shot"><img src="img/model-menu.png" width="680" height="890" alt="Меню выбора модели в NOVA: Note, Chord и Sonata без VPN, Symphony с VPN"></div>
       <div class="text-block">
         <span class="eyebrow">Переключение</span>
         <h3>Модель меняется в один щелчок</h3>
         <p>Кнопка с моделью стоит в правом верхнем углу. Переключать можно прямо посреди разговора: новая модель видит всю переписку.</p>
         <ul class="ticks">
-          <li>Прислал картинку или PDF в Note или Chord? NOVA сама передаст их Symphony и скажет об этом.</li>
+          <li>Прислал картинку или PDF в Note или Chord? NOVA сама передаст их Symphony или Sonata и скажет об этом.</li>
+          <li>Если выбранная модель недоступна (нет VPN, кончился лимит), ответит другая, и NOVA напишет об этом под ответом.</li>
           <li>Ollama запускается сам, когда нужна Note или Chord. Ничего открывать вручную не надо.</li>
           <li>Если модель не скачана, NOVA покажет команду, которая её скачает.</li>
         </ul>
@@ -623,17 +654,19 @@ th.c { text-align: center; }
               <th scope="col">Возможность</th>
               <th scope="col" class="c note">Note<span>лёгкая</span></th>
               <th scope="col" class="c chord">Chord<span>средняя</span></th>
+              <th scope="col" class="c sonata">Sonata<span>сильная</span></th>
               <th scope="col" class="c symphony">Symphony<span>сильная</span></th>
             </tr>
           </thead>
           <tbody>
-            <tr><td>Работает без интернета</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="n" aria-label="нет">—</span></td></tr>
-            <tr><td>Работает в России без VPN</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="n" aria-label="нет">—</span></td></tr>
-            <tr><td>Без ключа и лимитов</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="n" aria-label="нет">—</span></td></tr>
-            <tr><td>Погода, новости, курсы, поиск *</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
-            <tr><td>Читает код, тексты и Word</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
-            <tr><td>Видит картинки и PDF</td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
-            <tr><td>Не нужна мощная видеокарта</td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
+            <tr><td>Работает без интернета</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="n" aria-label="нет">—</span></td></tr>
+            <tr><td>Работает в России без VPN</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="n" aria-label="нет">—</span></td></tr>
+            <tr><td>Без ключа и лимитов</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="n" aria-label="нет">—</span></td></tr>
+            <tr><td>Погода, новости, курсы, поиск *</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
+            <tr><td>Читает код, тексты и Word</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
+            <tr><td>Видит картинки и PDF</td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
+            <tr><td>Не нужна мощная видеокарта</td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
+            <tr><td>Управляет компьютером, таймеры, память</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -726,7 +759,7 @@ th.c { text-align: center; }
       <div class="text-block">
         <span class="who note"><span class="m-icon"><svg aria-hidden="true"><use href="#i-note"/></svg></span>Отвечает Note</span>
         <h3>Свежие данные, а не догадки</h3>
-        <p>NOVA сама решает, когда пора заглянуть в сеть, и показывает, откуда взяла ответ. Так умеют все три модели.</p>
+        <p>NOVA сама решает, когда пора заглянуть в сеть, и показывает, откуда взяла ответ. Так умеют все четыре модели.</p>
         <ul class="ticks">
           <li>Погода на несколько дней для любого города</li>
           <li>Главные новости и новости по теме</li>
@@ -745,7 +778,7 @@ th.c { text-align: center; }
         <ul class="ticks">
           <li>Код и тексты: <code>.py</code>, <code>.js</code>, <code>.lua</code>, <code>.html</code> и десятки других</li>
           <li>Документы Word</li>
-          <li>Картинки и PDF смотрит Symphony</li>
+          <li>Картинки и PDF смотрят Sonata и Symphony</li>
         </ul>
       </div>
       <div class="shot-stack">
@@ -757,10 +790,15 @@ th.c { text-align: center; }
     <div class="feature">
       <div class="text-block">
         <span class="eyebrow">Голос</span>
-        <h3>Говори, а NOVA пишет</h3>
-        <p>Нажми на микрофон: полоски прыгают в такт голосу, а текст появляется в поле. Ответы NOVA читает вслух, а в настройках включается автоозвучка.</p>
+        <h3>Разговаривай голосом, как по телефону</h3>
+        <p>Нажми на трубку: говоришь, NOVA отвечает вслух и снова слушает, без клавиатуры. Шар дышит в такт твоему голосу, а нажатие на него перебивает NOVA.</p>
+        <ul class="ticks">
+          <li>В разговоре NOVA отвечает коротко, как живой собеседник</li>
+          <li>Микрофон рядом просто превращает речь в текст</li>
+          <li>Ответы можно озвучить и в обычном чате</li>
+        </ul>
       </div>
-      <div class="shot"><img src="img/voice.png" width="1500" height="300" loading="lazy" alt="Запись голоса: красная точка, таймер и живая звуковая волна"></div>
+      <div class="shot"><img src="img/call.jpg" width="1920" height="1200" loading="lazy" alt="Голосовой разговор с NOVA: светящийся шар, вопрос пользователя и ответ NOVA"></div>
     </div>
 
     <div class="feature flip">
@@ -777,13 +815,56 @@ th.c { text-align: center; }
       <div class="shot"><img src="img/menu.png" width="1920" height="1200" loading="lazy" alt="Меню чата: роль, переименование, скачать .md и .json, удалить"></div>
     </div>
 
+    <div class="feature">
+      <div class="text-block">
+        <span class="eyebrow">Компьютер</span>
+        <h3>Открывает и закрывает программы</h3>
+        <p>Напиши «открой дискорд» или «закрой роблокс». Простые команды NOVA выполняет мгновенно, сложные понимает любая из четырёх моделей.</p>
+        <ul class="ticks">
+          <li>Программы и игры из меню «Пуск», папки, громкость</li>
+          <li>«Посмотри на мой экран»: NOVA сама сделает скриншот и ответит по нему</li>
+          <li>Закрыть программу или выключить компьютер можно только после твоей кнопки «Да»</li>
+          <li>Удалять файлы и запускать незнакомые программы NOVA не умеет</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="img/pc.jpg" width="1920" height="1200" loading="lazy" alt="NOVA открыла Калькулятор, а на «закрой калькулятор» показывает кнопки «Закрыть Calculator» и «Не надо»"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="text-block">
+        <span class="eyebrow">Таймеры</span>
+        <h3>Напомнит, даже если окно закрыто</h3>
+        <p>«Таймер на 5 минут», «напомни через 20 минут выключить духовку», «напомни завтра в 9:00 про контрольную». Когда время придёт, поверх всех окон появится окошко со звуком.</p>
+        <ul class="ticks">
+          <li>Обратный отсчёт в углу окна, отмена в один щелчок</li>
+          <li>Кнопка «Ещё 5 минут», если пока не до того</li>
+          <li>Пропущенные напоминания NOVA покажет при следующем запуске</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="img/timers.jpg" width="1920" height="1200" loading="lazy" alt="В шапке NOVA колокольчик с обратным отсчётом и список: таймер и напоминание выключить духовку"></div>
+    </div>
+
+    <div class="feature">
+      <div class="text-block">
+        <span class="eyebrow">Память</span>
+        <h3>Помнит важное о тебе</h3>
+        <p>Расскажи, как тебя зовут, чем занимаешься и что любишь, и NOVA будет помнить это во всех чатах. Под ответом она покажет, что запомнила.</p>
+        <ul class="ticks">
+          <li>«Запомни, что…», «что ты обо мне знаешь?», «забудь…»</li>
+          <li>Всё видно в настройках, удалить можно по одному или сразу всё</li>
+          <li>Пароли, номера карт и коды NOVA не запоминает</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="img/memory.jpg" width="1920" height="1200" loading="lazy" alt="Раздел «Память» в настройках NOVA: список того, что она знает о пользователе"></div>
+    </div>
+
     <div class="more">
       <div><b>Характер и имя</b><span>Дружелюбная, краткая, весёлая или учитель. Обращается к тебе по имени.</span></div>
       <div><b>Свои инструкции</b><span>Напиши в настройках, как NOVA должна отвечать, и она будет помнить это в каждом чате.</span></div>
       <div><b>Код и таблицы</b><span>Аккуратное оформление ответов и кнопка «Копировать» у каждого блока кода.</span></div>
       <div><b>Город по умолчанию</b><span>Спроси «какая погода», и NOVA сама подставит твой город.</span></div>
       <div><b>Живое небо</b><span>Звёзды плывут за мышкой, пролетают метеоры, а пока NOVA пишет, небо оживает. Есть и светлая тема.</span></div>
-      <div><b>Всё хранится у тебя</b><span>Чаты, настройки и ключ лежат в папке NOVA на твоём диске.</span></div>
+      <div><b>Всё хранится у тебя</b><span>Чаты, память, таймеры, настройки и ключи лежат в папке NOVA на твоём диске.</span></div>
     </div>
   </section>
 
@@ -792,7 +873,7 @@ th.c { text-align: center; }
     <div class="section-head">
       <span class="eyebrow">Установка</span>
       <h2>Три шага и один по желанию</h2>
-      <p class="lead">Первые три шага занимают около минуты, после них работает Symphony. Четвёртый добавляет Note и Chord, тут всё зависит от скорости интернета: модели весят 2,5 и 5,2 ГБ.</p>
+      <p class="lead">Первые три шага занимают около минуты, после них работают Sonata и Symphony. Четвёртый добавляет Note и Chord, тут всё зависит от скорости интернета: модели весят 2,5 и 5,2 ГБ.</p>
     </div>
     <div class="steps">
       <div class="step">
@@ -805,8 +886,8 @@ th.c { text-align: center; }
         <p class="note">Если появится синее окно «Windows защитила компьютер», нажми «Подробнее», потом «Выполнить в любом случае».</p>
       </div>
       <div class="step">
-        <h3>Вставь ключ Gemini</h3>
-        <p>Он нужен для Symphony и бесплатный: <a href="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a>, вход через Google-аккаунт, кнопка «Create API key». NOVA попросит его при первом запуске.</p>
+        <h3>Вставь ключ</h3>
+        <p>Для Sonata — бесплатный ключ GigaChat: <a href="https://developers.sber.ru/studio">developers.sber.ru/studio</a> → «Создать проект» → GigaChat API → «Получить ключ». Для Symphony — ключ Gemini: <a href="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a>. Оба вставляются в ⚙ Настройках.</p>
       </div>
       <div class="step optional">
         <span class="badge">по желанию</span>
@@ -849,11 +930,11 @@ th.c { text-align: center; }
     <div class="faq">
       <details>
         <summary>Это правда бесплатно?</summary>
-        <p>Да. У Note и Chord вообще нет лимитов, они работают на твоём железе. У Symphony есть бесплатный дневной лимит Google. Если он закончится, NOVA так и скажет, а лимит обновится на следующий день в 10–11 утра по Москве. Пока его нет, можно спрашивать Note и Chord.</p>
+        <p>Да. У Note и Chord вообще нет лимитов, они работают на твоём железе. Sonata работает на бесплатной годовой квоте GigaChat для физлиц, её хватает надолго. У Symphony есть бесплатный дневной лимит Google. Если он закончится, NOVA так и скажет, а лимит обновится на следующий день в 10–11 утра по Москве. Пока его нет, можно спрашивать Note и Chord.</p>
       </details>
       <details>
         <summary>Работает ли в России?</summary>
-        <p>Note и Chord работают без VPN, им вообще не нужен интернет. Symphony работает только через VPN: Google не пускает к Gemini из России. Если VPN выключен, NOVA покажет понятную ошибку, а не сломается.</p>
+        <p>Note и Chord работают без VPN, им вообще не нужен интернет. Sonata тоже работает без VPN: это GigaChat от Сбера. Symphony работает только через VPN: Google не пускает к Gemini из России. Если VPN выключен, NOVA покажет понятную ошибку, а не сломается.</p>
       </details>
       <details>
         <summary>Какая нужна видеокарта?</summary>
@@ -861,7 +942,7 @@ th.c { text-align: center; }
       </details>
       <details>
         <summary>Где хранятся мои чаты?</summary>
-        <p>Только у тебя на диске, в папке NOVA: чаты в <code>chats</code>, настройки в <code>nova_settings.json</code>, ключ в <code>nova_key.json</code>. С Note и Chord вопросы не покидают компьютер. С Symphony вопросы и вложения уходят в Google Gemini, чтобы получить ответ.</p>
+        <p>Только у тебя на диске, в папке NOVA: чаты в <code>chats</code>, настройки в <code>nova_settings.json</code>, ключ в <code>nova_key.json</code>. Долгая память — в <code>nova_memory.json</code>, таймеры — в <code>nova_reminders.json</code>. С Note и Chord вопросы не покидают компьютер. С Sonata вопросы уходят в GigaChat (Сбер), с Symphony — в Google Gemini, чтобы получить ответ. Скриншот экрана NOVA делает только по твоей просьбе и показывает его в сообщении.</p>
       </details>
       <details>
         <summary>Почему Windows ругается на установщик?</summary>
@@ -869,7 +950,7 @@ th.c { text-align: center; }
       </details>
       <details>
         <summary>Есть версия для телефона?</summary>
-        <p>Да, для Android: открой <a href="app/">crosshexud.github.io/nova/app</a> в Chrome и нажми «Установить NOVA на телефон» (или «⋮» → «Установить приложение»). На телефоне работает Symphony: нужен интернет, ключ Gemini и в России VPN. Есть погода, курсы ЦБ, Википедия, картинки и PDF; новостей пока нет, а Note и Chord есть только на компьютере. Версии для Mac пока нет.</p>
+        <p>Да, для Android: открой <a href="app/">crosshexud.github.io/nova/app</a> в Chrome и нажми «Установить NOVA на телефон» (или «⋮» → «Установить приложение»). На телефоне работают Symphony (ключ Gemini, в России нужен VPN) и Sonata на DeepSeek (ключ DeepSeek или OpenRouter; ключ GigaChat работает только на компьютере). Есть погода, курсы ЦБ, Википедия, картинки и PDF, долгая память, голосовой разговор и таймеры (пока приложение открыто). Новостей пока нет, а Note, Chord и управление компьютером есть только на компьютере. Версии для Mac пока нет.</p>
       </details>
       <details>
         <summary>Что делать, если что-то не работает?</summary>
@@ -884,14 +965,14 @@ th.c { text-align: center; }
     <p class="lead">Скачай архив, запусти установщик и задай первый вопрос. Хоть с интернетом, хоть без.</p>
     <a class="btn primary" href="NOVA.zip" download>
       <svg aria-hidden="true"><use href="#i-download"/></svg>
-      Скачать NOVA <small>.zip · 115 КБ</small>
+      Скачать NOVA <small>.zip · 162 КБ</small>
     </a>
   </div>
 </main>
 
 <footer class="wrap foot">
-  <span>NOVA 3.0 · Note, Chord и Symphony для Windows</span>
-  <span>Python · Edge · Ollama · Google Gemini</span>
+  <span>NOVA 3.1 · Note, Chord, Sonata и Symphony для Windows</span>
+  <span>Python · Edge · Ollama · GigaChat · Google Gemini</span>
 </footer>
 
 <div class="zoom" id="zoom" hidden><img id="zoomImg" alt=""></div>
@@ -980,6 +1061,7 @@ th.c { text-align: center; }
   const MODELS = {
     note: { title: "Note", kind: "лёгкая модель", setup: 'Что поставить: Ollama и команду <code>ollama pull qwen3:4b-instruct</code>.' },
     chord: { title: "Chord", kind: "средняя модель", setup: 'Что поставить: Ollama и команду <code>ollama pull qwen3:8b</code>.' },
+    sonata: { title: "Sonata", kind: "сильная модель", setup: 'Что поставить: только бесплатный ключ GigaChat с <a href="https://developers.sber.ru/studio">developers.sber.ru/studio</a>. VPN не нужен.' },
     symphony: { title: "Symphony", kind: "сильная модель", setup: "Что поставить: только бесплатный ключ Gemini. В России нужен VPN." },
   };
   const form = document.getElementById("picker");
@@ -989,8 +1071,8 @@ th.c { text-align: center; }
     const local = gpu === "8" ? "chord" : "note";
     let model, why;
     if (vision === "yes") {
-      model = "symphony";
-      why = "Картинки, скриншоты и PDF видит только Symphony.";
+      model = "sonata";
+      why = "Картинки, скриншоты и PDF видят Sonata и Symphony. Sonata работает в России без VPN, Symphony чуть умнее, но ей нужен VPN.";
       why += net === "sometimes"
         ? ` Когда интернета нет, переключайся на ${MODELS[local].title}: она работает и офлайн.`
         : ` Для обычных вопросов можно держать под рукой ${MODELS[local].title}, у неё нет лимитов.`;
@@ -1003,8 +1085,8 @@ th.c { text-align: center; }
       why = "Note быстро работает на видеокарте с 6 ГБ. Chord тоже запустится, но будет отвечать медленнее.";
       if (net === "always") why += " Сложные вопросы можно отдавать Symphony.";
     } else if (net === "always") {
-      model = "symphony";
-      why = "Без мощной видеокарты удобнее Symphony: она думает на серверах Google, а твоему компьютеру остаётся только показывать ответ.";
+      model = "sonata";
+      why = "Без мощной видеокарты удобнее Sonata: она думает на серверах Сбера и работает в России без VPN. Symphony тоже подойдёт, если есть VPN.";
     } else {
       model = "note";
       why = "Note запустится и на слабом компьютере, просто ответы пойдут медленнее. Зато без интернета.";
