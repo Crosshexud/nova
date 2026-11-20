@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NOVA — ИИ-ассистент для Windows</title>
+<meta name="description" content="Личный ИИ-ассистент для Windows с тремя моделями: Note и Chord работают на твоём компьютере без интернета, Symphony подключает Gemini от Google. Бесплатно.">
+<meta name="theme-color" content="#06070e">
+<meta property="og:type" content="website">
+<meta property="og:title" content="NOVA — три нейросети, две без интернета">
+<meta property="og:description" content="Личный ИИ-ассистент для Windows: Note и Chord работают прямо на видеокарте, Symphony видит картинки и PDF. Бесплатно.">
+<meta property="og:url" content="https://crosshexud.github.io/nova/">
+<meta property="og:image" content="https://crosshexud.github.io/nova/img/chat.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Орбиты NOVA: три модели = три орбиты вокруг одного ядра. Первый экран с орбитами → окно программы →
+   модели и подбор → что работает без интернета → возможности со скриншотами → установка → вопросы.
+   Сайт сознательно только тёмный, как сама NOVA. */
+:root {
+  --space: #06070e;
+  --space-2: #0e1020;
+  --space-3: #151831;
+  --line: rgba(196, 181, 253, 0.12);
+  --line-strong: rgba(196, 181, 253, 0.24);
+  --text: #efedf9;
+  --text-2: #bdb8d6;
+  --muted: #8a85a6;
+  --violet: #8b5cf6;
+  --violet-hi: #c4b5fd;
+  --indigo: #6366f1;
+  --note: #7dd3fc;      /* Note — холодная голубая искра */
+  --chord: #a78bfa;     /* Chord — фирменный фиолетовый */
+  --symphony: #f0abfc;  /* Symphony — тёплый розовый */
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --off: #6b6787;
+  --font-display: "Unbounded", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --radius: 18px;
+  --gutter-l: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 84px); }
+body {
+  margin: 0;
+  background: var(--space);
+  color: var(--text);
+  font: 400 17px/1.65 var(--font-body);
+  padding-left: var(--gutter-l);
+  padding-right: var(--gutter-r);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 30;
+  background: var(--space);
+}
+body::after {
+  /* звёзды и свечение — одним фиксированным слоем, без картинок */
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,.7), transparent 60%),
+    radial-gradient(1px 1px at 27% 72%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1.5px 1.5px at 44% 34%, rgba(216,204,255,.8), transparent 60%),
+    radial-gradient(1px 1px at 63% 12%, rgba(255,255,255,.55), transparent 60%),
+    radial-gradient(1px 1px at 78% 58%, rgba(255,255,255,.6), transparent 60%),
+    radial-gradient(1.5px 1.5px at 91% 27%, rgba(216,204,255,.75), transparent 60%),
+    radial-gradient(1px 1px at 8% 88%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1px 1px at 55% 90%, rgba(255,255,255,.45), transparent 60%),
+    radial-gradient(1px 1px at 36% 52%, rgba(255,255,255,.4), transparent 60%),
+    radial-gradient(1px 1px at 70% 80%, rgba(216,204,255,.5), transparent 60%),
+    radial-gradient(900px 600px at 82% -8%, rgba(139,92,246,.22), transparent 62%),
+    radial-gradient(800px 560px at 0% 105%, rgba(79,70,229,.16), transparent 60%),
+    var(--space);
+}
+
+/* ---------- плавная прокрутка (Lenis) и появление блоков ---------- */
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-stopped { overflow: hidden; }
+.rv { transition: opacity .9s cubic-bezier(.2, .7, .2, 1), transform .9s cubic-bezier(.2, .7, .2, 1); transition-delay: var(--d, 0s); }
+.rv.pre { opacity: 0; transform: translateY(36px); }
+
+a { color: var(--violet-hi); }
+img { max-width: 100%; display: block; }
+:focus-visible { outline: 2px solid var(--violet-hi); outline-offset: 3px; border-radius: 8px; }
+
+.wrap { max-width: 1160px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.12; text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: clamp(28px, 4vw, 42px); }
+h3 { font-size: 21px; line-height: 1.3; }
+p { margin: 0; }
+.lead { font-size: 19px; color: var(--text-2); max-width: 36em; }
+.eyebrow {
+  font: 500 12.5px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--violet-hi);
+}
+code { font: 500 .88em var(--font-mono); padding: .1em .4em; border-radius: 6px; background: var(--space-3); border: 1px solid var(--line); color: var(--violet-hi); }
+
+/* ---------- шапка (прилипает при прокрутке) ---------- */
+.topbar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  margin-left: calc(-1 * var(--gutter-l));
+  margin-right: calc(-1 * var(--gutter-r));
+  padding-left: var(--gutter-l);
+  padding-right: var(--gutter-r);
+  background: rgba(6, 7, 14, 0.72);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border-bottom: 1px solid var(--line);
+}
+.nav { display: flex; align-items: center; gap: 24px; padding-block: 14px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+.brand svg { width: 32px; height: 32px; }
+.brand b { font: 700 18px var(--font-display); letter-spacing: 0.14em; }
+.nav-links { display: flex; gap: 22px; margin-left: auto; }
+.nav-links a { color: var(--text-2); text-decoration: none; font-weight: 600; font-size: 15px; }
+.nav-links a:hover { color: var(--text); }
+.nav .btn { padding: 10px 16px; font-size: 14.5px; border-radius: 12px; }
+
+/* ---------- кнопки ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+  font: 700 16px var(--font-body);
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform .15s, background .15s, box-shadow .2s, border-color .15s;
+}
+.btn:hover { transform: translateY(-2px); border-color: var(--violet-hi); }
+.btn.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #8b5cf6, #6d5cf6 55%, #6366f1);
+  color: #fff;
+  box-shadow: 0 10px 34px rgba(124,58,237,.45), inset 0 1px 0 rgba(255,255,255,.2);
+}
+.btn.primary:hover { box-shadow: 0 14px 40px rgba(124,58,237,.6); }
+.btn:disabled { opacity: .6; cursor: progress; transform: none; }
+.btn small { font: 500 12.5px var(--font-mono); opacity: .8; }
+.btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+.dl-status { min-height: 1.5em; font-size: 14.5px; color: var(--text-2); }
+.dl-status.ok { color: var(--ok); }
+.dl-status.err { color: var(--warn); }
+
+/* ---------- первый экран ---------- */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 40px; padding-block: 44px 28px; }
+.hero h1 { font-size: clamp(34px, 4.6vw, 58px); margin-block: 18px 22px; }
+.hero h1 em { font-style: normal; background: linear-gradient(100deg, var(--note) 0%, var(--chord) 45%, var(--symphony) 95%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-block: 30px 12px; }
+.req { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 16px; font-size: 14px; color: var(--muted); }
+.req span { display: inline-flex; align-items: center; gap: 7px; }
+.req span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--violet); }
+.orbit-box { position: relative; display: grid; place-items: center; min-width: 0; }
+.orbit-box svg { width: min(540px, 100%); height: auto; overflow: visible; }
+.orbit-box text { font: 700 15px var(--font-body); letter-spacing: .02em; paint-order: stroke; stroke: var(--space); stroke-width: 5px; stroke-linejoin: round; }
+.orbit-box .tag { font: 500 10.5px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.orbit-glow { transform-origin: 270px 210px; animation: breathe 5s ease-in-out infinite; }
+@keyframes breathe { 50% { transform: scale(1.12); opacity: .7; } }
+
+/* окно программы со скриншотом */
+.window {
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--space-2);
+  box-shadow: 0 30px 90px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.4), 0 0 80px rgba(139,92,246,.18);
+}
+.window-bar { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 0 0 14px; background: #0b0c18; border-bottom: 1px solid var(--line); font: 600 12.5px var(--font-body); color: var(--text-2); }
+.window-bar svg { width: 15px; height: 15px; }
+.window-bar .ctrl { margin-left: auto; display: flex; height: 100%; }
+.window-bar .ctrl i { width: 44px; display: grid; place-items: center; color: var(--muted); font-style: normal; font-size: 13px; }
+.window img { width: 100%; height: auto; cursor: zoom-in; }
+.showcase { padding-block: 8px 30px; perspective: 1600px; }
+.showcase .window { transform-origin: 50% 0; will-change: transform; }
+.orbit-box svg { will-change: transform; }
+.caption { margin-top: 12px; font-size: 14px; color: var(--muted); text-align: center; }
+
+/* ---------- секции ---------- */
+section { padding-block: 76px; }
+.section-head { display: grid; gap: 14px; margin-bottom: 40px; max-width: 780px; }
+
+/* ---------- три модели ---------- */
+.models { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.model {
+  --c: var(--chord);
+  position: relative;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  padding: 26px 24px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--space-3), var(--space-2));
+  overflow: hidden;
+}
+.model.note { --c: var(--note); }
+.model.symphony { --c: var(--symphony); }
+.model::after {
+  /* орбита модели: у лёгкой маленькая, у сильной большая */
+  content: "";
+  position: absolute;
+  right: calc(-1 * var(--o) * .3);
+  top: calc(-1 * var(--o) * .12);
+  width: var(--o);
+  height: calc(var(--o) * .42);
+  border: 1.5px solid var(--c);
+  border-radius: 50%;
+  opacity: .32;
+  transform: rotate(-16deg);
+  pointer-events: none;
+}
+.model.note { --o: 120px; }
+.model.chord { --o: 180px; }
+.model.symphony { --o: 240px; }
+.model-top { display: flex; align-items: center; gap: 14px; }
+.m-icon { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); flex-shrink: 0; }
+.m-icon svg { width: 22px; height: 22px; }
+.model h3 { font-size: 24px; }
+.model .kind { font: 500 11.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c); }
+.model > p { color: var(--text-2); font-size: 15.5px; }
+.facts { margin: 4px 0 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.facts div { display: flex; justify-content: space-between; gap: 14px; padding-block: 9px; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.facts .yes { color: var(--ok); }
+.facts .need { color: var(--warn); }
+.model .foot-note { font-size: 13px; color: var(--muted); }
+
+.switch-row { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr); gap: 52px; align-items: center; margin-top: 56px; }
+.switch-shot { justify-self: center; width: min(440px, 100%); border-radius: 16px; overflow: hidden; border: 1px solid var(--line-strong); box-shadow: 0 24px 70px rgba(0,0,0,.55), 0 0 60px rgba(139,92,246,.15); }
+.switch-shot img { width: 100%; height: auto; }
+
+.text-block { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.text-block p { color: var(--text-2); }
+.ticks { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 9px; }
+.ticks li { position: relative; padding-left: 24px; color: var(--text-2); }
+.ticks li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--violet); }
+
+/* таблица сравнения */
+.compare { margin-top: 64px; display: grid; gap: 18px; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--space-2); }
+table { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 15.5px; }
+th, td { padding: 14px 18px; text-align: left; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+thead th { font: 700 15px var(--font-body); background: var(--space-3); }
+thead th span { display: block; font: 500 10.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+thead th.note { color: var(--note); }
+thead th.chord { color: var(--chord); }
+thead th.symphony { color: var(--symphony); }
+td:first-child { color: var(--text-2); }
+td.c { text-align: center; width: 15%; }
+th.c { text-align: center; }
+.y, .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font: 700 14px var(--font-body); }
+.y { background: rgba(52, 211, 153, .14); color: var(--ok); }
+.n { background: rgba(138, 133, 166, .12); color: var(--off); }
+.table-note { font-size: 14px; color: var(--muted); }
+
+/* подбор модели */
+.picker-box { margin-top: 64px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; border: 1px solid var(--line-strong); border-radius: 22px; overflow: hidden; background: var(--space-2); }
+.picker { padding: 30px 30px 26px; display: grid; gap: 22px; align-content: start; }
+.picker h3 { font-size: 24px; }
+.picker fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; }
+.picker legend { padding: 0; margin-bottom: 10px; font-weight: 700; font-size: 15.5px; }
+.picker legend small { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { position: relative; }
+.chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.chip span { display: inline-block; padding: 9px 15px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--text-2); font-weight: 600; font-size: 14.5px; transition: background .15s, border-color .15s, color .15s; }
+.chip input:checked + span { background: rgba(139, 92, 246, .22); border-color: var(--violet-hi); color: var(--text); }
+.chip input:focus-visible + span { outline: 2px solid var(--violet-hi); outline-offset: 2px; }
+.chip:hover span { border-color: var(--violet-hi); }
+.pick-result {
+  --c: var(--chord);
+  position: relative;
+  padding: 30px;
+  display: grid;
+  gap: 14px;
+  align-content: center;
+  background:
+    radial-gradient(420px 260px at 85% 0%, color-mix(in srgb, var(--c) 22%, transparent), transparent 70%),
+    var(--space-3);
+  border-left: 1px solid var(--line);
+  transition: background .3s;
+}
+.pick-result[data-model="note"] { --c: var(--note); }
+.pick-result[data-model="symphony"] { --c: var(--symphony); }
+.pick-result .eyebrow { color: var(--c); }
+.pick-name { display: flex; align-items: center; gap: 14px; }
+.pick-name .m-icon { width: 54px; height: 54px; border-radius: 15px; }
+.pick-name .m-icon svg { width: 26px; height: 26px; }
+.pick-name b { font: 700 34px/1 var(--font-display); }
+.pick-name small { display: block; margin-top: 6px; font: 500 11.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c); }
+.pick-why { color: var(--text-2); }
+.pick-setup { font-size: 14.5px; color: var(--muted); }
+
+/* ---------- без интернета ---------- */
+.offline { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.off-col { padding: 26px 26px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--space-2); display: grid; gap: 14px; align-content: start; }
+.off-col h3 { display: flex; align-items: center; gap: 12px; font-size: 19px; }
+.off-col h3 i { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 700 15px var(--font-body); font-style: normal; flex-shrink: 0; }
+.off-col.works h3 i { background: rgba(52, 211, 153, .14); color: var(--ok); }
+.off-col.waits h3 i { background: rgba(251, 191, 36, .12); color: var(--warn); }
+.off-col ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
+.off-col li { padding-block: 11px; border-top: 1px solid var(--line); color: var(--text-2); font-size: 15.5px; display: grid; gap: 2px; }
+.off-col li b { color: var(--text); font-weight: 700; }
+.ru-note { margin-top: 18px; display: flex; gap: 14px; align-items: center; padding: 18px 22px; border-radius: var(--radius); border: 1px dashed var(--line-strong); color: var(--text-2); font-size: 15.5px; }
+.ru-note b { color: var(--text); }
+.ru-note svg { width: 26px; height: 26px; flex-shrink: 0; color: var(--note); }
+
+/* ---------- возможности ---------- */
+.feature { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 52px; align-items: center; padding-block: 34px; }
+.feature.flip { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); }
+.feature.flip .text-block { order: 2; }
+.who { display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 5px 12px 5px 6px; border-radius: 999px; background: var(--space-3); border: 1px solid var(--line); font-size: 13.5px; color: var(--text-2); }
+.who .m-icon { width: 24px; height: 24px; border-radius: 7px; }
+.who .m-icon svg { width: 13px; height: 13px; }
+.who.note { --c: var(--note); }
+.who.chord { --c: var(--chord); }
+.shot { border: 1px solid var(--line-strong); border-radius: 14px; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.55); background: var(--space-2); }
+.shot img { width: 100%; height: auto; cursor: zoom-in; }
+.shot-stack { display: grid; gap: 14px; min-width: 0; }
+
+.more { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 40px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line); }
+.more div { background: var(--space-2); padding: 22px 24px; display: grid; gap: 6px; align-content: start; }
+.more b { font-size: 16px; }
+.more span { color: var(--muted); font-size: 14.5px; line-height: 1.55; }
+
+/* ---------- установка ---------- */
+.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; counter-reset: step; }
+.step { position: relative; display: grid; gap: 10px; align-content: start; padding: 24px 22px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(180deg, var(--space-3), var(--space-2)); }
+.step::before {
+  counter-increment: step;
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  font: 700 17px var(--font-display);
+  color: #fff;
+  margin-bottom: 4px;
+}
+.step.optional { border-style: dashed; background: var(--space-2); }
+.step.optional::before { background: transparent; border: 1.5px solid var(--note); color: var(--note); }
+.step h3 { font-size: 19px; }
+.step p { color: var(--text-2); font-size: 15px; }
+.step .note { font-size: 13.5px; color: var(--muted); }
+.badge { width: fit-content; font: 500 10.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--note); border: 1px solid color-mix(in srgb, var(--note) 40%, transparent); padding: 3px 8px; border-radius: 6px; }
+
+.terminal { margin-top: 22px; border: 1px solid var(--line); border-radius: 14px; background: #05060b; overflow: hidden; }
+.terminal-bar { display: flex; justify-content: space-between; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--line); font: 500 12px var(--font-mono); color: var(--muted); }
+.cmd { display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--line); }
+.cmd:last-child { border-bottom: 0; }
+.cmd pre { margin: 0; flex: 1; min-width: 0; overflow-x: auto; font: 500 14px/1.6 var(--font-mono); color: var(--text); }
+.cmd pre::before { content: "> "; color: var(--violet-hi); }
+.cmd .what { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.copy { flex-shrink: 0; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--line-strong); background: transparent; color: var(--text-2); font: 600 13px var(--font-body); cursor: pointer; }
+.copy:hover { color: var(--text); border-color: var(--violet-hi); }
+.copy.done { color: var(--ok); border-color: var(--ok); }
+
+/* ---------- вопросы ---------- */
+.faq { display: grid; gap: 10px; max-width: 840px; }
+.faq details { border: 1px solid var(--line); border-radius: 14px; background: var(--space-2); }
+.faq summary { cursor: pointer; list-style: none; padding: 18px 52px 18px 22px; font-weight: 700; position: relative; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; position: absolute; right: 22px; top: 50%; translate: 0 -50%; font: 500 22px var(--font-mono); color: var(--violet-hi); transition: rotate .2s; }
+.faq details[open] summary::after { rotate: 45deg; }
+.faq details p { padding: 0 22px 20px; color: var(--text-2); }
+
+/* ---------- финал ---------- */
+.final { text-align: center; display: grid; justify-items: center; gap: 18px; padding-block: 80px 70px; }
+.final > svg { width: 120px; height: 120px; overflow: visible; }
+.foot { padding-block: 26px 34px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px 24px; color: var(--muted); font-size: 14px; }
+.foot span:last-child { margin-left: auto; font-family: var(--font-mono); font-size: 12.5px; }
+
+/* ---------- просмотр скриншота ---------- */
+.zoom { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: rgba(3,3,9,.88); backdrop-filter: blur(6px); cursor: zoom-out; }
+.zoom[hidden] { display: none; }
+.zoom img { max-height: 92vh; width: auto; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+
+@media (max-width: 1020px) {
+  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nav-links { display: none; }
+  .nav .btn { margin-left: auto; }
+}
+@media (max-width: 900px) {
+  .hero, .feature, .feature.flip, .switch-row, .picker-box, .offline { grid-template-columns: minmax(0, 1fr); gap: 30px; }
+  .picker-box { gap: 0; }
+  .pick-result { border-left: 0; border-top: 1px solid var(--line); }
+  .feature.flip .text-block { order: 0; }
+  .orbit-box { order: -1; }
+  .orbit-box svg { width: min(400px, 100%); }
+  .models, .more { grid-template-columns: minmax(0, 1fr); }
+  section { padding-block: 54px; }
+}
+@media (max-width: 560px) {
+  .steps { grid-template-columns: minmax(0, 1fr); }
+  .cmd { flex-wrap: wrap; }
+  .cmd pre { flex-basis: 100%; }
+  .cmd .what { white-space: normal; flex: 1; }
+  .picker, .pick-result { padding: 24px 20px; }
+  .ru-note { align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- значки моделей — те же, что в самой NOVA -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="18" r="4"/><path d="M12 18V2l7 4"/></symbol>
+  <symbol id="i-chord" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-symphony" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><path d="m9 9 12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+</svg>
+
+<div class="topbar">
+  <header class="wrap nav">
+    <a class="brand" href="#top" aria-label="NOVA">
+      <svg viewBox="0 0 230 230" aria-hidden="true"><ellipse cx="115" cy="115" rx="98" ry="38" fill="none" stroke="#8b5cf6" stroke-width="14"/><ellipse cx="115" cy="115" rx="38" ry="98" fill="none" stroke="#a78bfa" stroke-width="10"/><circle cx="115" cy="115" r="40" fill="#17112c" stroke="#a78bfa" stroke-width="8"/><circle cx="115" cy="115" r="26" fill="#8b5cf6"/><circle cx="115" cy="115" r="11" fill="#fff"/><circle cx="201" cy="97" r="14" fill="#fff"/></svg>
+      <b>NOVA</b>
+    </a>
+    <nav class="nav-links" aria-label="Разделы">
+      <a href="#models">Модели</a>
+      <a href="#offline">Без интернета</a>
+      <a href="#features">Возможности</a>
+      <a href="#install">Установка</a>
+      <a href="#faq">Вопросы</a>
+    </nav>
+    <a class="btn primary" href="NOVA.zip" download>
+      <svg aria-hidden="true"><use href="#i-download"/></svg>
+      Скачать
+    </a>
+  </header>
+</div>
+
+<main id="top">
+  <div class="wrap hero">
+    <div>
+      <span class="eyebrow">ИИ-ассистент для Windows · бесплатно</span>
+      <h1>Три нейросети.<br><em>Две без интернета.</em></h1>
+      <p class="lead">Note и Chord думают прямо на твоей видеокарте: без интернета, ключей и лимитов. Symphony подключает Gemini от Google, когда нужно посмотреть картинку или PDF. Чаты хранятся только у тебя на компьютере.</p>
+      <div class="hero-actions">
+        <a class="btn primary" href="NOVA.zip" download>
+          <svg aria-hidden="true"><use href="#i-download"/></svg>
+          Скачать NOVA <small>.zip · 101 КБ</small>
+        </a>
+        <a class="btn" href="#models">Сравнить модели</a>
+      </div>
+      <div class="req">
+        <span>Windows 10 или 11</span>
+        <span>Python 3.10+</span>
+        <span>Ollama для Note и Chord</span>
+        <span>Ключ Gemini для Symphony</span>
+      </div>
+    </div>
+    <div class="orbit-box">
+      <svg viewBox="0 0 540 420" role="img" aria-label="Три орбиты вокруг ядра NOVA: Note, Chord и Symphony">
+        <defs>
+          <radialGradient id="glow"><stop offset="0" stop-color="#c4b5fd" stop-opacity=".85"/><stop offset=".55" stop-color="#8b5cf6" stop-opacity=".2"/><stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/></radialGradient>
+          <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4b5fd"/><stop offset=".5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#6366f1"/></linearGradient>
+        </defs>
+        <circle class="orbit-glow" cx="270" cy="210" r="96" fill="url(#glow)"/>
+        <g transform="rotate(-14 270 210)">
+          <!-- Symphony: большая медленная орбита -->
+          <ellipse cx="270" cy="210" rx="250" ry="92" fill="none" stroke="#f0abfc" stroke-opacity=".38" stroke-width="1.6" stroke-dasharray="2 7" stroke-linecap="round"/>
+          <!-- Chord -->
+          <ellipse cx="270" cy="210" rx="170" ry="62" fill="none" stroke="#a78bfa" stroke-opacity=".6" stroke-width="2"/>
+          <!-- Note: маленькая быстрая -->
+          <ellipse cx="270" cy="210" rx="98" ry="36" fill="none" stroke="#7dd3fc" stroke-opacity=".7" stroke-width="2"/>
+
+          <circle cx="270" cy="210" r="38" fill="#17112c" stroke="#a78bfa" stroke-width="2.4"/>
+          <circle cx="270" cy="210" r="24" fill="#8b5cf6"/>
+          <circle cx="270" cy="210" r="10" fill="#fff"/>
+
+          <g>
+            <animateMotion dur="7s" repeatCount="indefinite" path="M368 210 A98 36 0 1 1 172 210 A98 36 0 1 1 368 210"/>
+            <circle r="7" fill="#7dd3fc"/>
+            <g transform="rotate(14)"><text x="12" y="-10" fill="#7dd3fc">Note</text></g>
+          </g>
+          <g>
+            <animateMotion dur="13s" begin="-4s" repeatCount="indefinite" path="M440 210 A170 62 0 1 1 100 210 A170 62 0 1 1 440 210"/>
+            <circle r="8.5" fill="#c4b5fd"/>
+            <g transform="rotate(14)"><text x="13" y="-11" fill="#c4b5fd">Chord</text></g>
+          </g>
+          <g>
+            <animateMotion dur="22s" begin="-15s" repeatCount="indefinite" path="M520 210 A250 92 0 1 1 20 210 A250 92 0 1 1 520 210"/>
+            <circle r="10" fill="#f0abfc"/>
+            <circle r="17" fill="none" stroke="#f0abfc" stroke-opacity=".35"/>
+            <g transform="rotate(14)"><text x="16" y="-13" fill="#f0abfc">Symphony</text></g>
+          </g>
+        </g>
+        <text class="tag" x="270" y="404" text-anchor="middle" fill="#8a85a6">на твоём ПК · на твоём ПК · в облаке Google</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="wrap showcase">
+    <div class="window">
+      <div class="window-bar">
+        <svg viewBox="0 0 230 230" aria-hidden="true"><ellipse cx="115" cy="115" rx="98" ry="38" fill="none" stroke="#8b5cf6" stroke-width="16"/><circle cx="115" cy="115" r="30" fill="#8b5cf6"/></svg>
+        NOVA
+        <span class="ctrl" aria-hidden="true"><i>—</i><i>▢</i><i>✕</i></span>
+      </div>
+      <img src="img/chat.png" width="1920" height="1200" alt="Окно NOVA: модель Chord придумывает хоррор-игру для Roblox с тремя монстрами">
+    </div>
+    <p class="caption">Настоящий ответ Chord. Он целиком посчитан на видеокарте RTX 2060 Super, интернет для него не нужен.</p>
+  </div>
+
+  <!-- ======================= МОДЕЛИ ======================= -->
+  <section id="models" class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Модели</span>
+      <h2>Нота, аккорд и симфония</h2>
+      <p class="lead">Названия не случайные: от одной ноты до целого оркестра. Чем больше модель, тем подробнее и умнее ответы.</p>
+    </div>
+
+    <div class="models">
+      <article class="model note">
+        <div class="model-top">
+          <span class="m-icon"><svg aria-hidden="true"><use href="#i-note"/></svg></span>
+          <div><span class="kind">лёгкая</span><h3>Note</h3></div>
+        </div>
+        <p>Отвечает почти мгновенно. Хватает для вопросов, идей, переводов и простого кода.</p>
+        <dl class="facts">
+          <div><dt>Где работает</dt><dd>на твоём ПК</dd></div>
+          <div><dt>Интернет</dt><dd class="yes">не нужен</dd></div>
+          <div><dt>Лимиты</dt><dd class="yes">нет</dd></div>
+          <div><dt>Скачать</dt><dd>2,5 ГБ</dd></div>
+          <div><dt>Видеокарта</dt><dd>от 6 ГБ</dd></div>
+        </dl>
+        <p class="foot-note">Модель Qwen3 4B, запускается через Ollama.</p>
+      </article>
+
+      <article class="model chord">
+        <div class="model-top">
+          <span class="m-icon"><svg aria-hidden="true"><use href="#i-chord"/></svg></span>
+          <div><span class="kind">средняя</span><h3>Chord</h3></div>
+        </div>
+        <p>Умнее и подробнее. Хорошо пишет код, объясняет и придумывает сюжеты.</p>
+        <dl class="facts">
+          <div><dt>Где работает</dt><dd>на твоём ПК</dd></div>
+          <div><dt>Интернет</dt><dd class="yes">не нужен</dd></div>
+          <div><dt>Лимиты</dt><dd class="yes">нет</dd></div>
+          <div><dt>Скачать</dt><dd>5,2 ГБ</dd></div>
+          <div><dt>Видеокарта</dt><dd>от 8 ГБ</dd></div>
+        </dl>
+        <p class="foot-note">Модель Qwen3 8B. На RTX 2060 Super печатает около 47 токенов в секунду.</p>
+      </article>
+
+      <article class="model symphony">
+        <div class="model-top">
+          <span class="m-icon"><svg aria-hidden="true"><use href="#i-symphony"/></svg></span>
+          <div><span class="kind">сильная</span><h3>Symphony</h3></div>
+        </div>
+        <p>Самая умная. Видит картинки, скриншоты и PDF. Если одна модель Google занята, сама берёт другую.</p>
+        <dl class="facts">
+          <div><dt>Где работает</dt><dd>серверы Google</dd></div>
+          <div><dt>Интернет</dt><dd class="need">нужен</dd></div>
+          <div><dt>Лимиты</dt><dd>дневной лимит</dd></div>
+          <div><dt>Скачать</dt><dd>ничего</dd></div>
+          <div><dt>Видеокарта</dt><dd>любая</dd></div>
+        </dl>
+        <p class="foot-note">Gemini от Google, бесплатный ключ. В России нужен VPN.</p>
+      </article>
+    </div>
+
+    <div class="switch-row">
+      <div class="switch-shot"><img src="img/model-menu.png" width="512" height="464" alt="Меню выбора модели в NOVA: Note, Chord и Symphony"></div>
+      <div class="text-block">
+        <span class="eyebrow">Переключение</span>
+        <h3>Модель меняется в один щелчок</h3>
+        <p>Кнопка с моделью стоит в правом верхнем углу. Переключать можно прямо посреди разговора: новая модель видит всю переписку.</p>
+        <ul class="ticks">
+          <li>Прислал картинку или PDF в Note или Chord? NOVA сама передаст их Symphony и скажет об этом.</li>
+          <li>Ollama запускается сам, когда нужна Note или Chord. Ничего открывать вручную не надо.</li>
+          <li>Если модель не скачана, NOVA покажет команду, которая её скачает.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="compare">
+      <h3>Что умеет каждая</h3>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Возможность</th>
+              <th scope="col" class="c note">Note<span>лёгкая</span></th>
+              <th scope="col" class="c chord">Chord<span>средняя</span></th>
+              <th scope="col" class="c symphony">Symphony<span>сильная</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Работает без интернета</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="n" aria-label="нет">—</span></td></tr>
+            <tr><td>Работает в России без VPN</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="n" aria-label="нет">—</span></td></tr>
+            <tr><td>Без ключа и лимитов</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="n" aria-label="нет">—</span></td></tr>
+            <tr><td>Погода, новости, курсы, поиск *</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
+            <tr><td>Читает код, тексты и Word</td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
+            <tr><td>Видит картинки и PDF</td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
+            <tr><td>Не нужна мощная видеокарта</td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="n" aria-label="нет">—</span></td><td class="c"><span class="y" aria-label="да">✓</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-note">* Когда интернет есть. Без него Note и Chord отвечают из того, что знают сами.</p>
+    </div>
+
+    <div class="picker-box">
+      <form class="picker" id="picker">
+        <div class="text-block">
+          <span class="eyebrow">Подбор</span>
+          <h3>Какая модель подойдёт тебе</h3>
+        </div>
+        <fieldset>
+          <legend>Интернет у тебя</legend>
+          <div class="chips">
+            <label class="chip"><input type="radio" name="net" id="net-always" value="always" checked><span>Почти всегда есть</span></label>
+            <label class="chip"><input type="radio" name="net" id="net-sometimes" value="sometimes"><span>Бывает, что нет</span></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Видеокарта<small>Диспетчер задач → Производительность → Графический процессор → «Выделенная память»</small></legend>
+          <div class="chips">
+            <label class="chip"><input type="radio" name="gpu" id="gpu-8" value="8" checked><span>8 ГБ и больше</span></label>
+            <label class="chip"><input type="radio" name="gpu" id="gpu-6" value="6"><span>около 6 ГБ</span></label>
+            <label class="chip"><input type="radio" name="gpu" id="gpu-low" value="low"><span>Меньше или не знаю</span></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Нужно, чтобы NOVA смотрела картинки и PDF</legend>
+          <div class="chips">
+            <label class="chip"><input type="radio" name="vision" id="vision-no" value="no" checked><span>Не обязательно</span></label>
+            <label class="chip"><input type="radio" name="vision" id="vision-yes" value="yes"><span>Да, часто</span></label>
+          </div>
+        </fieldset>
+      </form>
+      <div class="pick-result" id="pickResult" data-model="chord" aria-live="polite">
+        <span class="eyebrow">Тебе подойдёт</span>
+        <div class="pick-name">
+          <span class="m-icon"><svg aria-hidden="true"><use id="pickIcon" href="#i-chord"/></svg></span>
+          <div><b id="pickTitle">Chord</b><small id="pickKind">средняя модель</small></div>
+        </div>
+        <p class="pick-why" id="pickWhy">Видеокарты хватает, чтобы Chord отвечала подробно и без лимитов. Для самых сложных вопросов есть Symphony.</p>
+        <p class="pick-setup" id="pickSetup">Что поставить: Ollama и команду <code>ollama pull qwen3:8b</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= БЕЗ ИНТЕРНЕТА ======================= -->
+  <section id="offline" class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Без интернета</span>
+      <h2>Интернет пропал, а NOVA отвечает</h2>
+      <p class="lead">Note и Chord живут на твоём компьютере, поэтому им не нужны ни сеть, ни ключ. Вот что работает, когда интернета нет.</p>
+    </div>
+    <div class="offline">
+      <div class="off-col works">
+        <h3><i aria-hidden="true">✓</i>Работает</h3>
+        <ul>
+          <li><b>Разговор с Note и Chord</b>Вопросы, объяснения, идеи, переводы.</li>
+          <li><b>Помощь с кодом и текстами</b>Найти ошибку, переписать, объяснить.</li>
+          <li><b>Файлы с кодом, тексты и Word</b>Перетаскиваешь в окно, модель читает.</li>
+          <li><b>Все чаты</b>История, поиск, роли, скачивание и автоназвания.</li>
+        </ul>
+      </div>
+      <div class="off-col waits">
+        <h3><i aria-hidden="true">…</i>Ждёт интернета</h3>
+        <ul>
+          <li><b>Symphony</b>И вместе с ней картинки и PDF.</li>
+          <li><b>Погода, новости, курсы и поиск</b>Модель ответит из своих знаний, но они могут устареть.</li>
+          <li><b>Голосовой ввод</b>Речь распознаёт сервис Microsoft в Edge.</li>
+          <li><b>Озвучка естественным голосом</b>Голос Windows работает и без сети, его можно выбрать в настройках.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="ru-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+      <p><b>В России Note и Chord работают без VPN.</b> Вопросы к ним вообще не уходят с компьютера, кроме поисковых запросов, когда модель сама идёт в интернет.</p>
+    </div>
+  </section>
+
+  <!-- ======================= ВОЗМОЖНОСТИ ======================= -->
+  <section id="features" class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Возможности</span>
+      <h2>Всё, что нужно от ассистента</h2>
+      <p class="lead">Ответ печатается потоком: первые слова появляются почти сразу. Все скриншоты ниже сняты с настоящих ответов.</p>
+    </div>
+
+    <div class="feature">
+      <div class="text-block">
+        <span class="who note"><span class="m-icon"><svg aria-hidden="true"><use href="#i-note"/></svg></span>Отвечает Note</span>
+        <h3>Свежие данные, а не догадки</h3>
+        <p>NOVA сама решает, когда пора заглянуть в сеть, и показывает, откуда взяла ответ. Так умеют все три модели.</p>
+        <ul class="ticks">
+          <li>Погода на несколько дней для любого города</li>
+          <li>Главные новости и новости по теме</li>
+          <li>Курсы валют по ЦБ, цены и любые факты</li>
+          <li>Пересказ страницы по ссылке</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="img/internet.png" width="1920" height="1200" loading="lazy" alt="Note отвечает про погоду в Москве на три дня и курс доллара, внизу источники ЦБ РФ и Open-Meteo"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="text-block">
+        <span class="who chord"><span class="m-icon"><svg aria-hidden="true"><use href="#i-chord"/></svg></span>Отвечает Chord</span>
+        <h3>Перетащи код, текст или скриншот</h3>
+        <p>До пяти файлов сразу, скриншот вставляется через <code>Ctrl+V</code>. Если прислать две версии одного файла, NOVA сравнит их по пунктам.</p>
+        <ul class="ticks">
+          <li>Код и тексты: <code>.py</code>, <code>.js</code>, <code>.lua</code>, <code>.html</code> и десятки других</li>
+          <li>Документы Word</li>
+          <li>Картинки и PDF смотрит Symphony</li>
+        </ul>
+      </div>
+      <div class="shot-stack">
+        <div class="shot"><img src="img/files.png" width="1920" height="1200" loading="lazy" alt="Chord находит ошибку в прикреплённом файле dice.py и показывает исправленный код"></div>
+        <div class="shot"><img src="img/attach-tray.png" width="1500" height="360" loading="lazy" alt="Поле ввода с прикреплённой картинкой и файлом"></div>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="text-block">
+        <span class="eyebrow">Голос</span>
+        <h3>Говори, а NOVA пишет</h3>
+        <p>Нажми на микрофон: полоски прыгают в такт голосу, а текст появляется в поле. Ответы NOVA читает вслух, а в настройках включается автоозвучка.</p>
+      </div>
+      <div class="shot"><img src="img/voice.png" width="1500" height="300" loading="lazy" alt="Запись голоса: красная точка, таймер и живая звуковая волна"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="text-block">
+        <span class="eyebrow">Роли и история</span>
+        <h3>Свой характер в каждом чате</h3>
+        <p>Один чат ведёт строгий программист, другой придумывает сюжеты для игр. Роль хранится вместе с чатом, а все чаты сохраняются сами.</p>
+        <ul class="ticks">
+          <li>Готовые роли и своя в свободной форме</li>
+          <li>Поиск по всем чатам и автоназвания</li>
+          <li>Скачать чат в <code>.md</code> или <code>.json</code> и загрузить обратно</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="img/menu.png" width="1920" height="1200" loading="lazy" alt="Меню чата: роль, переименование, скачать .md и .json, удалить"></div>
+    </div>
+
+    <div class="more">
+      <div><b>Характер и имя</b><span>Дружелюбная, краткая, весёлая или учитель. Обращается к тебе по имени.</span></div>
+      <div><b>Свои инструкции</b><span>Напиши в настройках, как NOVA должна отвечать, и она будет помнить это в каждом чате.</span></div>
+      <div><b>Код и таблицы</b><span>Аккуратное оформление ответов и кнопка «Копировать» у каждого блока кода.</span></div>
+      <div><b>Город по умолчанию</b><span>Спроси «какая погода», и NOVA сама подставит твой город.</span></div>
+      <div><b>Светлая тема</b><span>Тёмная по умолчанию, светлая в один щелчок.</span></div>
+      <div><b>Всё хранится у тебя</b><span>Чаты, настройки и ключ лежат в папке NOVA на твоём диске.</span></div>
+    </div>
+  </section>
+
+  <!-- ======================= УСТАНОВКА ======================= -->
+  <section id="install" class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Установка</span>
+      <h2>Три шага и один по желанию</h2>
+      <p class="lead">Первые три шага занимают около минуты, после них работает Symphony. Четвёртый добавляет Note и Chord, тут всё зависит от скорости интернета: модели весят 2,5 и 5,2 ГБ.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <h3>Скачай и распакуй</h3>
+        <p>Нажми «Скачать NOVA» и распакуй архив в любую папку, например <code>Документы\NOVA</code>.</p>
+      </div>
+      <div class="step">
+        <h3>Запусти установщик</h3>
+        <p>Дважды щёлкни <code>Install NOVA.bat</code>. Он проверит Python, поставит библиотеку Gemini и создаст ярлык на рабочем столе.</p>
+        <p class="note">Если появится синее окно «Windows защитила компьютер», нажми «Подробнее», потом «Выполнить в любом случае».</p>
+      </div>
+      <div class="step">
+        <h3>Вставь ключ Gemini</h3>
+        <p>Он нужен для Symphony и бесплатный: <a href="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a>, вход через Google-аккаунт, кнопка «Create API key». NOVA попросит его при первом запуске.</p>
+      </div>
+      <div class="step optional">
+        <span class="badge">по желанию</span>
+        <h3>Добавь Note и Chord</h3>
+        <p>Установи Ollama с <a href="https://ollama.com/download">ollama.com</a> и скачай модели командами ниже. Можно взять только одну.</p>
+      </div>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-bar"><span>Терминал Windows (Win+R → cmd)</span><span>шаг 4</span></div>
+      <div class="cmd">
+        <pre id="cmd-note">ollama pull qwen3:4b-instruct</pre>
+        <span class="what">Note · 2,5 ГБ</span>
+        <button class="copy" type="button" data-copy="cmd-note">Копировать</button>
+      </div>
+      <div class="cmd">
+        <pre id="cmd-chord">ollama pull qwen3:8b</pre>
+        <span class="what">Chord · 5,2 ГБ</span>
+        <button class="copy" type="button" data-copy="cmd-chord">Копировать</button>
+      </div>
+    </div>
+
+    <div class="feature" style="padding-bottom:0">
+      <div class="text-block">
+        <span class="eyebrow">Первый запуск</span>
+        <h3>NOVA сама подскажет, что делать</h3>
+        <p>Пока ключа нет, на стартовом экране висит подсказка с кнопкой «Вставить ключ». NOVA проверяет ключ настоящим запросом и сразу подключается. Без ключа можно сразу выбрать Note или Chord.</p>
+        <p>Нет Python? Установщик сам откроет страницу загрузки. При установке Python отметь галочку <code>Add python.exe to PATH</code> и запусти установщик ещё раз.</p>
+      </div>
+      <div class="shot"><img src="img/onboarding.png" width="1920" height="1200" loading="lazy" alt="Стартовый экран NOVA с подсказкой вставить ключ Gemini для Symphony"></div>
+    </div>
+  </section>
+
+  <!-- ======================= ВОПРОСЫ ======================= -->
+  <section id="faq" class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Вопросы</span>
+      <h2>Коротко о главном</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>Это правда бесплатно?</summary>
+        <p>Да. У Note и Chord вообще нет лимитов, они работают на твоём железе. У Symphony есть бесплатный дневной лимит Google. Если он закончится, NOVA так и скажет, а лимит обновится на следующий день в 10–11 утра по Москве. Пока его нет, можно спрашивать Note и Chord.</p>
+      </details>
+      <details>
+        <summary>Работает ли в России?</summary>
+        <p>Note и Chord работают без VPN, им вообще не нужен интернет. Symphony работает только через VPN: Google не пускает к Gemini из России. Если VPN выключен, NOVA покажет понятную ошибку, а не сломается.</p>
+      </details>
+      <details>
+        <summary>Какая нужна видеокарта?</summary>
+        <p>Для Note лучше от 6 ГБ видеопамяти, для Chord от 8 ГБ. На видеокарте послабее модели тоже запустятся: Ollama посчитает часть на процессоре, просто ответы пойдут медленнее. Symphony работает на серверах Google, ей видеокарта не нужна.</p>
+      </details>
+      <details>
+        <summary>Где хранятся мои чаты?</summary>
+        <p>Только у тебя на диске, в папке NOVA: чаты в <code>chats</code>, настройки в <code>nova_settings.json</code>, ключ в <code>nova_key.json</code>. С Note и Chord вопросы не покидают компьютер. С Symphony вопросы и вложения уходят в Google Gemini, чтобы получить ответ.</p>
+      </details>
+      <details>
+        <summary>Почему Windows ругается на установщик?</summary>
+        <p>Windows так реагирует на любой скачанный файл <code>.bat</code> без цифровой подписи. Нажми «Подробнее» и «Выполнить в любом случае». Установщик открытый: его можно посмотреть в Блокноте до запуска.</p>
+      </details>
+      <details>
+        <summary>Есть версия для Mac или телефона?</summary>
+        <p>Пока нет, NOVA работает только на Windows 10 и 11. Окно открывается через Microsoft Edge, который уже есть в Windows.</p>
+      </details>
+      <details>
+        <summary>Что делать, если что-то не работает?</summary>
+        <p>Загляни в файл <code>nova_errors.log</code> в папке NOVA, там записана причина. Для Symphony чаще всего помогает проверить интернет, VPN и ключ. Если Note или Chord пишут, что модель не скачана, выполни команду, которую покажет NOVA.</p>
+      </details>
+    </div>
+  </section>
+
+  <div class="wrap final">
+    <svg viewBox="0 0 230 230" aria-hidden="true"><circle cx="115" cy="115" r="78" fill="url(#glow)"/><ellipse cx="115" cy="115" rx="100" ry="37" fill="none" stroke="#f0abfc" stroke-opacity=".45" stroke-width="2" transform="rotate(-14 115 115)"/><ellipse cx="115" cy="115" rx="74" ry="27" fill="none" stroke="#a78bfa" stroke-opacity=".8" stroke-width="2.6" transform="rotate(-14 115 115)"/><ellipse cx="115" cy="115" rx="48" ry="18" fill="none" stroke="#7dd3fc" stroke-opacity=".8" stroke-width="2.4" transform="rotate(-14 115 115)"/><circle cx="115" cy="115" r="24" fill="#17112c" stroke="#a78bfa" stroke-width="2.4"/><circle cx="115" cy="115" r="15" fill="#8b5cf6"/><circle cx="115" cy="115" r="6.5" fill="#fff"/></svg>
+    <h2>Попробуй NOVA</h2>
+    <p class="lead">Скачай архив, запусти установщик и задай первый вопрос. Хоть с интернетом, хоть без.</p>
+    <a class="btn primary" href="NOVA.zip" download>
+      <svg aria-hidden="true"><use href="#i-download"/></svg>
+      Скачать NOVA <small>.zip · 101 КБ</small>
+    </a>
+  </div>
+</main>
+
+<footer class="wrap foot">
+  <span>NOVA 3.0 · Note, Chord и Symphony для Windows</span>
+  <span>Python · Edge · Ollama · Google Gemini</span>
+</footer>
+
+<div class="zoom" id="zoom" hidden><img id="zoomImg" alt=""></div>
+
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
+<script>
+(() => {
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---------- плавная прокрутка колёсиком ----------
+  // Lenis сглаживает прокрутку мышью; на телефонах остаётся родная прокрутка пальцем.
+  let lenis = null;
+  if (!reduceMotion && typeof window.Lenis === "function") {
+    try {
+      lenis = new Lenis({ lerp: 0.085, wheelMultiplier: 1, smoothWheel: true });
+      const raf = (t) => { lenis.raf(t); requestAnimationFrame(raf); };
+      requestAnimationFrame(raf);
+    } catch (e) {
+      lenis = null;
+    }
+  }
+  const HEADER = 84;
+  const scrollToEl = (el) => {
+    if (lenis) lenis.scrollTo(el, { offset: -HEADER, duration: 1.3 });
+    else el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+  };
+  document.querySelectorAll('a[href^="#"]').forEach((a) => a.addEventListener("click", (e) => {
+    const id = a.getAttribute("href").slice(1);
+    const target = id ? document.getElementById(id) : null;
+    if (!target) return;
+    e.preventDefault();
+    scrollToEl(target);
+  }));
+
+  // ---------- блоки мягко поднимаются, когда до них доходит прокрутка ----------
+  // То, что видно сразу при открытии, не прячется: первый экран всегда целый.
+  if (!reduceMotion && "IntersectionObserver" in window) {
+    const groups = [".model", ".more > div", ".step", ".off-col", ".faq details"];
+    groups.forEach((sel) => document.querySelectorAll(sel).forEach((el) => {
+      const i = [...el.parentElement.children].indexOf(el);
+      el.style.setProperty("--d", Math.min(i, 6) * 0.08 + "s");
+    }));
+    const io = new IntersectionObserver((entries) => entries.forEach((e) => {
+      if (e.isIntersecting) {
+        e.target.classList.remove("pre");
+        io.unobserve(e.target);
+      }
+    }), { rootMargin: "0px 0px -6% 0px", threshold: 0.06 });
+    document.querySelectorAll([
+      ".section-head", ".model", ".switch-row > *", ".compare", ".picker-box", ".off-col", ".ru-note",
+      ".feature > *", ".more > div", ".step", ".terminal", ".faq details", ".final > svg", ".final > h2", ".final > .lead",
+    ].join(",")).forEach((el) => {
+      if (el.getBoundingClientRect().top < innerHeight * 0.95) return;
+      el.classList.add("rv", "pre");
+      io.observe(el);
+    });
+  }
+
+  // ---------- окно NOVA выпрямляется при прокрутке, орбиты плывут медленнее страницы ----------
+  const win = document.querySelector(".showcase .window");
+  const orbit = document.querySelector(".orbit-box svg");
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  let ticking = false;
+  const onScroll = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      const vh = innerHeight;
+      const r = win.getBoundingClientRect();
+      const p = clamp(1 - (r.top - vh * 0.2) / (vh * 0.65), 0, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      win.style.transform = `rotateX(${(1 - ease) * 16}deg) scale(${0.92 + 0.08 * ease})`;
+      const y = Math.min(scrollY, vh * 1.2);
+      orbit.style.transform = `translateY(${y * 0.22}px) rotate(${y * 0.012}deg)`;
+    });
+  };
+  if (!reduceMotion) {
+    if (lenis) lenis.on("scroll", onScroll);
+    addEventListener("scroll", onScroll, { passive: true });
+    addEventListener("resize", onScroll);
+    onScroll();
+  }
+
+  // ---------- подбор модели ----------
+  const MODELS = {
+    note: { title: "Note", kind: "лёгкая модель", setup: 'Что поставить: Ollama и команду <code>ollama pull qwen3:4b-instruct</code>.' },
+    chord: { title: "Chord", kind: "средняя модель", setup: 'Что поставить: Ollama и команду <code>ollama pull qwen3:8b</code>.' },
+    symphony: { title: "Symphony", kind: "сильная модель", setup: "Что поставить: только бесплатный ключ Gemini. В России нужен VPN." },
+  };
+  const form = document.getElementById("picker");
+  const pick = () => {
+    const v = (name) => form.querySelector(`input[name="${name}"]:checked`).value;
+    const net = v("net"), gpu = v("gpu"), vision = v("vision");
+    const local = gpu === "8" ? "chord" : "note";
+    let model, why;
+    if (vision === "yes") {
+      model = "symphony";
+      why = "Картинки, скриншоты и PDF видит только Symphony.";
+      why += net === "sometimes"
+        ? ` Когда интернета нет, переключайся на ${MODELS[local].title}: она работает и офлайн.`
+        : ` Для обычных вопросов можно держать под рукой ${MODELS[local].title}, у неё нет лимитов.`;
+    } else if (gpu === "8") {
+      model = "chord";
+      why = "Видеокарты хватает, чтобы Chord отвечала подробно и без лимитов.";
+      why += net === "always" ? " Для самых сложных вопросов есть Symphony." : " Интернет ей не нужен совсем.";
+    } else if (gpu === "6") {
+      model = "note";
+      why = "Note быстро работает на видеокарте с 6 ГБ. Chord тоже запустится, но будет отвечать медленнее.";
+      if (net === "always") why += " Сложные вопросы можно отдавать Symphony.";
+    } else if (net === "always") {
+      model = "symphony";
+      why = "Без мощной видеокарты удобнее Symphony: она думает на серверах Google, а твоему компьютеру остаётся только показывать ответ.";
+    } else {
+      model = "note";
+      why = "Note запустится и на слабом компьютере, просто ответы пойдут медленнее. Зато без интернета.";
+    }
+    const m = MODELS[model];
+    document.getElementById("pickResult").dataset.model = model;
+    document.getElementById("pickIcon").setAttribute("href", "#i-" + model);
+    document.getElementById("pickTitle").textContent = m.title;
+    document.getElementById("pickKind").textContent = m.kind;
+    document.getElementById("pickWhy").textContent = why;
+    document.getElementById("pickSetup").innerHTML = m.setup;
+  };
+  form.addEventListener("change", pick);
+  form.addEventListener("submit", (e) => e.preventDefault());
+  pick();
+
+  // ---------- копирование команд ----------
+  document.querySelectorAll("[data-copy]").forEach((btn) => btn.addEventListener("click", () => {
+    const pre = document.getElementById(btn.dataset.copy);
+    const done = () => {
+      btn.textContent = "Скопировано";
+      btn.classList.add("done");
+      setTimeout(() => { btn.textContent = "Копировать"; btn.classList.remove("done"); }, 1800);
+    };
+    const select = () => {
+      const r = document.createRange();
+      r.selectNodeContents(pre);
+      const s = getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+      btn.textContent = "Нажми Ctrl+C";
+    };
+    try {
+      navigator.clipboard.writeText(pre.textContent).then(done, select);
+    } catch (e) {
+      select();
+    }
+  }));
+
+  // ---------- просмотр скриншотов ----------
+  const zoom = document.getElementById("zoom");
+  const zoomImg = document.getElementById("zoomImg");
+  document.querySelectorAll(".shot img, .window img").forEach((img) =>
+    img.addEventListener("click", () => {
+      zoomImg.src = img.src;
+      zoomImg.alt = img.alt;
+      zoom.hidden = false;
+      if (lenis) lenis.stop();
+    })
+  );
+  const closeZoom = () => {
+    zoom.hidden = true;
+    if (lenis) lenis.start();
+  };
+  zoom.addEventListener("click", closeZoom);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !zoom.hidden) closeZoom(); });
+
+  // ---------- без лишнего движения, если так настроена система ----------
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.querySelectorAll("svg").forEach((s) => s.pauseAnimations && s.pauseAnimations());
+  }
+})();
+</script>
+</body>
+</html>
