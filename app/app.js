@@ -43,6 +43,7 @@
     musicNote: '<circle cx="8" cy="18" r="4"/><path d="M12 18V2l7 4"/>',
     musicChord: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
     musicSymphony: '<path d="M9 18V5l12-2v13"/><path d="m9 9 12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    musicSonata: '<circle cx="7" cy="18" r="3"/><path d="M10 18V4c2 2.2 6 2.6 8 5.5"/><path d="M10 9.5c2 2.2 6 2.6 8 5.5"/>',
     chevron: '<path d="m6 9 6 6 6-6"/>',
   };
 
@@ -127,6 +128,7 @@
     roleClear: $("#roleClear"), roleSave: $("#roleSave"), importBtn: $("#importBtn"), importInput: $("#importInput"),
     voiceStrip: $("#voiceStrip"), voiceWave: $("#voiceWave"), recTime: $("#recTime"),
     keyStatus: $("#keyStatus"), keyInput: $("#keyInput"), keySave: $("#keySave"),
+    dsSection: $("#dsSection"), dsStatus: $("#dsStatus"), dsInput: $("#dsInput"), dsSave: $("#dsSave"),
   };
 
   const ROLE_PRESETS = [
@@ -449,6 +451,7 @@
       ready: st.ready, problem: st.problem, mode: st.mode, modes: st.modes,
       model: st.model, chats: st.chats, current: st.current,
       settings: st.settings || S.settings, personas: st.personas || S.personas, key: st.key || S.key,
+      dskey: st.dskey || S.dskey, groups: st.groups || S.groups,
     });
     pickVoice();
     renderSidebar();
@@ -557,7 +560,7 @@
 
   // ---------- выбор модели: Note / Chord / Symphony ----------
 
-  const MODE_ICONS = { note: "musicNote", chord: "musicChord", symphony: "musicSymphony" };
+  const MODE_ICONS = { note: "musicNote", chord: "musicChord", sonata: "musicSonata", symphony: "musicSymphony" };
 
   function renderModes() {
     const cur = S.modes[S.mode] || { title: "NOVA", kind: "" };
@@ -569,7 +572,7 @@
     $(".mb-text b", els.modes).textContent = cur.title;
     $(".mb-text small", els.modes).textContent = cur.kind;
     const menu = $("#modelMenu", els.modes);
-    for (const [key, m] of Object.entries(S.modes)) {
+    const addItem = ([key, m]) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "model-item" + (key === S.mode ? " active" : "");
@@ -587,10 +590,25 @@
         setMode(key);
       });
       menu.append(b);
+    };
+    // разделы: «Без VPN в России» и «Нужен VPN в России»
+    const groups = S.groups || {};
+    const buckets = new Map(Object.keys(groups).map((g) => [g, []]));
+    const rest = [];
+    for (const entry of Object.entries(S.modes)) (buckets.get(entry[1].group) || rest).push(entry);
+    for (const [g, items] of buckets) {
+      if (!items.length) continue;
+      const h = div("model-group " + g);
+      h.innerHTML = "<i></i><span></span>";
+      $("span", h).textContent = groups[g];
+      menu.append(h);
+      items.forEach(addItem);
     }
+    rest.forEach(addItem);
     if (Object.values(S.modes).some((m) => m.engine === "ollama")) {
       const foot = div("model-menu-foot");
-      foot.textContent = "Note и Chord работают прямо на твоём компьютере — без интернета, ключа и лимитов. Картинки и PDF смотрит Symphony.";
+      foot.textContent = "Note и Chord работают прямо на твоём компьютере — без интернета, ключа и лимитов. " +
+        "Если выбранная модель недоступна, NOVA сама ответит другой. Картинки и PDF смотрит Symphony.";
       menu.append(foot);
     }
     $("#modelBtn", els.modes).addEventListener("click", (e) => {
@@ -652,6 +670,7 @@
         $("div", els.problem).append(b);
       };
       if (engine === "gemini" && S.key && !S.key.set) addButton("Вставить ключ", () => openSettings(true));
+      if (engine === "deepseek" && S.dskey && !S.dskey.set) addButton("Вставить ключ DeepSeek", () => openSettings("ds"));
       if (engine === "ollama" && /ollama\.com/.test(S.problem)) {
         addButton("Скачать Ollama", () => api("/api/open_url", { url: "https://ollama.com/download" }).catch(() => {}));
       }
@@ -977,6 +996,7 @@
         when(m.time);
         setActions(m.text, m.local);
         if (m.stopped) note("Ответ был остановлен");
+        if (m.note) note(m.note); // «Symphony недоступна — ответила Sonata»
       },
       finish(ev) {
         removeThinking();
@@ -999,6 +1019,7 @@
           when(null, ev.model);
           if (finalText) setActions(finalText, kind === "command");
           if (kind === "stopped") note(finalText ? "Ответ остановлен" : "Остановлено");
+          if (ev.note) note(ev.note);
           follow();
           if (kind === "ai" && S.settings.auto_speak) {
             const btn = $(".act-speak", w);
@@ -1815,12 +1836,47 @@
     }
   }
 
+  // ---------- ключ DeepSeek для Sonata ----------
+
+  function renderDsStatus() {
+    const k = S.dskey || {};
+    els.dsStatus.className = "key-status " + (k.set ? "ok" : "missing");
+    els.dsStatus.innerHTML = icon(k.set ? "check" : "alert", 15) + "<span></span>";
+    $("span", els.dsStatus).textContent = !k.set
+      ? "Ключ не задан — Sonata не работает"
+      : `Ключ сохранён (${k.hint})` + (k.provider === "openrouter" ? " · DeepSeek через OpenRouter" : " · DeepSeek");
+  }
+
+  async function saveDsKey() {
+    const key = els.dsInput.value.trim();
+    if (!key) return els.dsInput.focus();
+    els.dsSave.disabled = true;
+    els.dsSave.textContent = "Проверяю…";
+    try {
+      const st = await api("/api/deepseek_key", { key });
+      applyState(st, { thread: false });
+      if (!els.welcome.hidden) showWelcome(true);
+      els.dsInput.value = "";
+      renderDsStatus();
+      toast(st.message || "Ключ сохранён", "ok");
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      els.dsSave.disabled = false;
+      els.dsSave.textContent = "Проверить и сохранить";
+    }
+  }
+
   function openSettings(focusKey = false) {
     closeMobileSidebar();
     fillSettings();
     renderKeyStatus();
+    renderDsStatus();
     els.settings.hidden = false;
-    if (focusKey === true || !(S.key && S.key.set)) els.keyInput.focus();
+    if (focusKey === "ds") {
+      els.dsInput.focus();
+      els.dsSection.scrollIntoView({ block: "start" });
+    } else if (focusKey === true || !(S.key && S.key.set)) els.keyInput.focus();
     else els.setName.focus();
   }
 
@@ -1835,6 +1891,10 @@
     els.keySave.addEventListener("click", saveKey);
     els.keyInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") saveKey();
+    });
+    els.dsSave.addEventListener("click", saveDsKey);
+    els.dsInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") saveDsKey();
     });
     els.settingsClose.addEventListener("click", closeSettings);
     els.settings.addEventListener("mousedown", (e) => {

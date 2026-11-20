@@ -9,17 +9,31 @@
 
   // ---------- модели, характер, подсказки ----------
 
+  // На телефоне две модели: Sonata (DeepSeek, в России без VPN) и Symphony (Gemini).
   const MODES = {
+    sonata: {
+      title: "Sonata", kind: "сильная модель", hint: "DeepSeek через интернет. Нужен ключ DeepSeek",
+      engine: "deepseek", group: "novpn",
+    },
     symphony: {
-      title: "Symphony", kind: "сильная модель", hint: "Самая умная, видит картинки и PDF. Нужен интернет",
-      engine: "gemini",
-      // по порядку: основная, быстрая запасная, ещё одна запасная (см. race)
-      models: [["gemini-3.5-flash", "LOW"], ["gemini-flash-lite-latest", null], ["gemini-3.7-flash", "LOW"]],
+      title: "Symphony", kind: "сильная модель", hint: "Gemini: самая умная, видит картинки и PDF",
+      engine: "gemini", group: "vpn",
+      // Лимит бесплатного ключа Google считается на каждую модель отдельно, поэтому запасных много.
+      // Порядок: основная, быстрая запасная, остальные (см. race).
+      models: [
+        ["gemini-3.5-flash", "LOW"], ["gemini-flash-lite-latest", null], ["gemma-4-26b-a4b-it", null],
+        ["gemini-3.5-flash-lite", null], ["gemini-3.7-flash", "LOW"], ["gemini-3.1-flash-lite", null],
+      ],
     },
   };
-  const MODE = "symphony";
+  const GROUPS = { novpn: "Без VPN в России", vpn: "Нужен VPN в России" };
+  const FALLBACK = { symphony: ["sonata"], sonata: ["symphony"] }; // кто отвечает, если выбранная недоступна
+  const NO_DOCS = new Set(["gemma-4-26b-a4b-it"]); // эти модели не читают PDF
+  const DEFAULT_MODE = "symphony";
   const GEMINI_LIGHT = "gemini-flash-lite-latest"; // проверка ключа и названия чатов — самая быстрая
   const API = "https://generativelanguage.googleapis.com/v1beta/models/";
+  const DEEPSEEK_API = "https://api.deepseek.com/chat/completions";
+  const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
 
   const PERSONAS = {
     friendly: { title: "Дружелюбная", desc: "Тёплая, живая, по делу",
@@ -33,14 +47,15 @@
   };
 
   const DEFAULT_SETTINGS = {
-    mode: MODE, name: "", city: "", persona: "friendly", custom: "",
+    mode: DEFAULT_MODE, name: "", city: "", persona: "friendly", custom: "",
     auto_speak: false, voice_send: false, voice: "", rate: 1.05,
   };
 
   const BASE_PROMPT = "Ты NOVA — персональный ИИ-ассистент. О себе говоришь в женском роде. Отвечай на языке пользователя.";
-  const TIER_PROMPT =
-    " Сейчас ты работаешь как модель NOVA Symphony (сильная модель) в версии NOVA для телефона. " +
-    "На компьютере у NOVA есть ещё две модели: Note и Chord, они работают без интернета.";
+  const tierPrompt = (mode) =>
+    ` Сейчас ты работаешь как модель NOVA ${MODES[mode].title} (${mode === "sonata" ? "DeepSeek" : "Gemini"}) ` +
+    "в версии NOVA для телефона. Всего у NOVA четыре модели: Note и Chord работают на компьютере без интернета, " +
+    "Sonata (DeepSeek) работает в России без VPN, Symphony (Gemini) видит картинки и PDF.";
   const FORMAT_PROMPT =
     "Ответы показываются с Markdown-оформлением: используй его, когда это помогает читать — " +
     "**жирный** для главного, списки, короткие заголовки ###, `код` и блоки ```кода``` с указанием языка, " +
@@ -62,6 +77,9 @@
   const NO_KEY =
     "Для Symphony нужен ключ Gemini. Это бесплатно: открой ⚙ Настройки → «Ключ Gemini» " +
     "и вставь ключ с aistudio.google.com.";
+  const NO_DS_KEY =
+    "Для Sonata нужен ключ DeepSeek: открой ⚙ Настройки → «Ключ DeepSeek». Ключ берут на platform.deepseek.com " +
+    "(платно, но дёшево) или на openrouter.ai (там DeepSeek бывает бесплатно).";
 
   const MAX_HISTORY = 40;        // сколько последних реплик NOVA помнит в одном чате
   const KEEP_ATTACHMENTS = 3;    // вложения скольких последних сообщений модель видит целиком
@@ -92,10 +110,13 @@
     },
   };
   const apiKey = () => LS.get("key", "");
+  const dsKey = () => LS.get("dskey", "");
+  const dsProvider = (key) => (key.startsWith("sk-or-") ? "openrouter" : "deepseek");
 
   function cleanSettings(data) {
     const s = { ...DEFAULT_SETTINGS };
     if (!data || typeof data !== "object") return s;
+    if (MODES[data.mode]) s.mode = data.mode;
     if (PERSONAS[data.persona]) s.persona = data.persona;
     for (const [k, limit] of [["name", 40], ["city", 60], ["voice", 120], ["custom", 1500]]) {
       if (typeof data[k] === "string") s[k] = data[k].trim().slice(0, limit);
@@ -188,13 +209,14 @@
     return "Новый чат";
   }
 
-  function record(chat, role, text, { sources, local, stopped, files } = {}) {
+  function record(chat, role, text, { sources, local, stopped, files, note } = {}) {
     const stamp = nowIso();
     const msg = { role, text, time: stamp };
     if (files && files.length) msg.files = files;
     if (sources && sources.length) msg.sources = sources.map((s) => [...s]);
     if (local) msg.local = true;
     if (stopped) msg.stopped = true;
+    if (note) msg.note = note; // «Symphony недоступна — ответила Sonata»
     if (!chat.messages.length) chat.title = makeTitle(text, files);
     chat.messages.push(msg);
     chat.updated = stamp;
@@ -202,8 +224,17 @@
     saveChat(chat);
   }
 
+  const mode = () => (MODES[settings.mode] ? settings.mode : DEFAULT_MODE);
+
+  // Готова ли модель, а если нет — почему.
+  function status(m) {
+    if (MODES[m].engine === "deepseek") return dsKey() ? [true, ""] : [false, NO_DS_KEY];
+    return apiKey() ? [true, ""] : [false, NO_KEY];
+  }
+
   const model = () => {
-    const names = MODES[MODE].models.map((m) => m[0]);
+    if (MODES[mode()].engine === "deepseek") return lastModel && lastModel.includes("deepseek") ? lastModel : "deepseek-chat";
+    const names = MODES.symphony.models.map((m) => m[0]);
     return names.includes(lastModel) ? lastModel : names[0];
   };
 
@@ -226,16 +257,22 @@
     for (const m of cur.messages) {
       for (const f of m.files || []) if (f.kind === "image") f.url = await blobUrl(f.stored);
     }
-    const cfg = MODES[MODE];
+    const ds = dsKey();
+    const [ok, problem] = status(mode());
     return {
-      ready: !!key,
-      problem: key ? "" : NO_KEY,
-      mode: MODE,
-      modes: { [MODE]: { title: cfg.title, kind: cfg.kind, hint: cfg.hint, engine: cfg.engine, available: !!key, problem: key ? "" : NO_KEY } },
+      ready: ok,
+      problem,
+      mode: mode(),
+      modes: Object.fromEntries(Object.entries(MODES).map(([k, v]) => {
+        const [available, why] = status(k);
+        return [k, { title: v.title, kind: v.kind, hint: v.hint, engine: v.engine, group: v.group, available, problem: why }];
+      })),
+      groups: GROUPS,
       settings: { ...settings },
       key: { set: !!key, source: key ? "file" : "", hint: key ? "…" + key.slice(-4) : "" },
+      dskey: { set: !!ds, hint: ds ? "…" + ds.slice(-4) : "", provider: ds ? dsProvider(ds) : "" },
       personas: Object.fromEntries(Object.entries(PERSONAS).map(([k, v]) => [k, { title: v.title, desc: v.desc }])),
-      model: key ? model() : null,
+      model: ok ? model() : null,
       busy,
       current: cur,
       chats: list.map(summary),
@@ -429,10 +466,10 @@
     return contents;
   }
 
-  function systemPrompt(role) {
+  function systemPrompt(role, m = "symphony") {
     const s = settings;
     const persona = PERSONAS[s.persona] || PERSONAS.friendly;
-    const parts = [BASE_PROMPT + " " + persona.prompt + TIER_PROMPT, FORMAT_PROMPT, FILES_PROMPT, TOOLS_PROMPT];
+    const parts = [BASE_PROMPT + " " + persona.prompt + tierPrompt(m), FORMAT_PROMPT, FILES_PROMPT, TOOLS_PROMPT];
     const about = [];
     if (s.name) about.push(`Пользователя зовут ${s.name} — иногда обращайся по имени, но не в каждом ответе.`);
     if (s.city) about.push(`Город пользователя — ${s.city}: если про погоду или местные дела спрашивают без города, имей в виду его.`);
@@ -693,7 +730,7 @@
     }
     if (code === 429) {
       return "Упёрлась в лимит бесплатных запросов Google на всех моделях. Подожди минуту. " +
-        "Если не помогло, значит, кончился дневной лимит — он сбросится в 11:00 по Москве.";
+        `Если не помогло, значит, кончился дневной лимит — он обновится в ${resetTimeText()}.`;
     }
     if (code === 404) return "Google отключил модели, с которыми работает NOVA. Нужно обновить NOVA для телефона.";
     if (typeof code === "number" && code >= 500) return "Серверы Google сейчас перегружены или сбоят. Попробуй через минуту.";
@@ -730,10 +767,10 @@
         const [name, level] = cands[i];
         const run = { ctl: new AbortController(), done: false };
         runs.push(run);
-        if (i) report("Google сейчас перегружен — подключаю запасную модель");
+        if (i) report("Основная модель Google не отвечает — подключаю запасную");
         const outer = () => run.ctl.abort();
         if (signal) signal.addEventListener("abort", outer, { once: true });
-        timer = setTimeout(start, HEDGE_MS);
+        if (runs.length < 2) timer = setTimeout(start, HEDGE_MS); // параллельно — не больше двух сразу
         geminiStream(name, makeBody(level), run.ctl.signal, (p) => {
           if (winner < 0) crown(i);
           if (winner === i) onPart(p);
@@ -749,6 +786,7 @@
             if (winner >= 0) return; // проигравший — его отменили
             lastError = e;
             console.warn("NOVA:", name, e);
+            if (e.code === 429) markExhausted(name, e);
             if (!passing(e)) {
               crown(i);
               return reject(e); // ключ, регион, вложение — другая модель не поможет
@@ -762,11 +800,43 @@
     });
   }
 
+  // --- дневные лимиты Google: модель с кончившимся лимитом пропускаем до его обновления ---
+
+  // Google обнуляет лимиты в полночь по тихоокеанскому времени.
+  function nextQuotaReset() {
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const nthSunday = (month, n) => {
+      const d = new Date(Date.UTC(y, month, 1));
+      return Date.UTC(y, month, 1 + ((7 - d.getUTCDay()) % 7) + (n - 1) * 7);
+    };
+    // летнее время в США: со второго воскресенья марта до первого воскресенья ноября
+    const summer = now >= nthSunday(2, 2) + 10 * 3600e3 && now < nthSunday(10, 1) + 9 * 3600e3;
+    const reset = new Date(Date.UTC(y, now.getUTCMonth(), now.getUTCDate(), summer ? 7 : 8));
+    if (reset <= now) reset.setUTCDate(reset.getUTCDate() + 1);
+    return reset.getTime();
+  }
+  const resetTimeText = () => new Date(nextQuotaReset()).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+
+  function markExhausted(name, e) {
+    const low = String(e.message || "").toLowerCase();
+    const until = low.includes("perday") || low.includes("per day") ? nextQuotaReset() : Date.now() + 60e3;
+    LS.set("exhausted", { ...LS.get("exhausted", {}), [name]: until });
+  }
+  const isExhausted = (name) => (LS.get("exhausted", {})[name] || 0) > Date.now();
+
   // Спросить Symphony: потоковый ответ, походы в инструменты, запасные модели.
   async function askGemini(base, message, atts, role, emit, report, signal) {
     const history = await historyContents(base);
     const question = await userParts(message, atts, true);
-    const system = systemPrompt(role);
+    const system = systemPrompt(role, "symphony");
+    const hasPdf = atts.some((a) => a.kind === "pdf");
+    let cands = MODES.symphony.models.filter((c) => !(hasPdf && NO_DOCS.has(c[0])));
+    const fresh = cands.filter((c) => !isExhausted(c[0]));
+    if (fresh.length && fresh[0] !== cands[0]) {
+      report(`У основной модели кончился дневной лимит Google — отвечает запасная (лимит обновится в ${resetTimeText()})`);
+    }
+    if (fresh.length) cands = fresh; // у всех кончился — всё равно пробуем: вдруг лимит уже обновился
     let lastError = null;
 
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -801,7 +871,7 @@
               emit("delta", piece);
             }
           };
-          if (!chosen) chosen = await race(MODES[MODE].models, makeBody, signal, onPart, report);
+          if (!chosen) chosen = await race(cands, makeBody, signal, onPart, report);
           else await geminiStream(chosen.name, makeBody(chosen.level), signal, onPart);
           const calls = modelParts.filter((p) => p.functionCall);
           if (!calls.length || round === 6) break;
@@ -825,10 +895,239 @@
           await sleep(1500);
           continue; // сбой посреди ответа или все модели устали — ещё одна попытка
         }
-        return { text: explainError(e), kind: "error" };
+        break;
       }
     }
-    return { text: explainError(lastError), kind: "error" };
+    return { text: explainError(lastError), kind: "error", fallback: !attachmentError(lastError) };
+  }
+
+  // Google отказался из-за вложения — другая модель тут не поможет.
+  const attachmentError = (e) =>
+    !!e && e.code === 400 && /payload|too large|exceed|image|inline|mime|pdf|document/.test(String(e.message).toLowerCase());
+
+  // --- Sonata: DeepSeek (свой сайт или OpenRouter), формат запросов как у OpenAI ---
+
+  let orModels = { at: 0, list: [] };
+  async function deepseekTarget(key) {
+    if (window.NOVA_TEST_SONATA) return window.NOVA_TEST_SONATA; // для проверок: { url, model }
+    if (dsProvider(key) === "deepseek") return { url: DEEPSEEK_API, model: "deepseek-chat" };
+    // OpenRouter: бесплатные модели DeepSeek то появляются, то исчезают — берём из их списка
+    if (Date.now() - orModels.at > 6 * 3600e3) {
+      try {
+        const data = (await getJson("https://openrouter.ai/api/v1/models")).data || [];
+        const ids = data.map((m) => m.id).filter((id) => id && id.startsWith("deepseek/") && id.endsWith(":free"));
+        const rank = (id) => (/r1|distill/.test(id) ? 2 : 0) + (/chat|v3/.test(id) ? 0 : 1);
+        ids.sort((a, b) => rank(a) - rank(b));
+        orModels = { at: Date.now(), list: ids };
+      } catch (e) {
+        console.warn("NOVA: список моделей OpenRouter", e);
+      }
+    }
+    return { url: OPENROUTER_API, model: orModels.list[0] || "deepseek/deepseek-chat-v3-0324:free" };
+  }
+
+  const dsHeaders = (key, url) => ({
+    "Content-Type": "application/json",
+    Authorization: "Bearer " + key,
+    ...(url.includes("openrouter.ai") ? { "HTTP-Referer": "https://crosshexud.github.io/nova/", "X-Title": "NOVA" } : {}),
+  });
+
+  // инструменты в формате OpenAI (те же, что у Symphony)
+  const lowerTypes = (s) => (Array.isArray(s) ? s.map(lowerTypes) : s && typeof s === "object"
+    ? Object.fromEntries(Object.entries(s).map(([k, v]) => [k, k === "type" && typeof v === "string" ? v.toLowerCase() : lowerTypes(v)]))
+    : s);
+  const OPENAI_TOOLS = TOOL_DECLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: lowerTypes(t.parameters) } }));
+
+  async function deepseekStream(key, target, messages, tools, signal, onText) {
+    const ctl = new AbortController();
+    let timedOut = false;
+    let timer = 0;
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { timedOut = true; ctl.abort(); }, SILENCE_MS);
+    };
+    const onAbort = () => ctl.abort();
+    if (signal) signal.addEventListener("abort", onAbort);
+    arm();
+    const calls = [];
+    try {
+      const body = { model: target.model, messages, stream: true };
+      if (tools) body.tools = tools;
+      const res = await realFetch(target.url, { method: "POST", headers: dsHeaders(key, target.url), body: JSON.stringify(body), signal: ctl.signal });
+      if (!res.ok) {
+        const err = await gemErrorFrom(res);
+        err.provider = "deepseek";
+        throw err;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        arm();
+        buf += decoder.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, i).trim();
+          buf = buf.slice(i + 1);
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (data === "[DONE]") continue;
+          let obj;
+          try { obj = JSON.parse(data); } catch { continue; }
+          if (obj.error) throw Object.assign(new GemError(obj.error.code, obj.error.message), { provider: "deepseek" });
+          for (const ch of obj.choices || []) {
+            const d = ch.delta || {};
+            if (d.content) onText(d.content);
+            for (const tc of d.tool_calls || []) {
+              const c = calls[tc.index || 0] || (calls[tc.index || 0] = { id: "", name: "", arguments: "" });
+              if (tc.id) c.id = tc.id;
+              if (tc.function && tc.function.name) c.name += tc.function.name;
+              if (tc.function && tc.function.arguments) c.arguments += tc.function.arguments;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (timedOut) throw Object.assign(new GemError("timeout", "DeepSeek слишком долго молчит"), { provider: "deepseek" });
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", onAbort);
+    }
+    return calls.filter(Boolean);
+  }
+
+  function explainDsError(e) {
+    const text = String((e && e.message) || e || "");
+    const low = text.toLowerCase();
+    const code = e && e.code;
+    if (code === 401 || code === 403) return "DeepSeek не принял ключ: он неверный или удалён. Проверь его в ⚙ Настройки → «Ключ DeepSeek».";
+    if (code === 402 || /insufficient|balance/.test(low)) return "На счёте DeepSeek кончились деньги. Пополни баланс на platform.deepseek.com или возьми ключ OpenRouter.";
+    if (code === 429) return "Упёрлась в лимит DeepSeek. Бесплатно через OpenRouter — около 50 ответов в день; подожди немного или попробуй завтра.";
+    if (code === 404) return "Бесплатная модель DeepSeek сейчас недоступна на OpenRouter. Попробуй позже.";
+    if (typeof code === "number" && code >= 500) return "Серверы DeepSeek сейчас перегружены. Попробуй через минуту.";
+    if (code === "timeout") return "DeepSeek слишком долго не отвечает. Попробуй ещё раз чуть позже.";
+    if (e instanceof TypeError || /failed to fetch|network|load failed/.test(low)) return "Не получилось достучаться до DeepSeek. Проверь интернет.";
+    return "Sonata не смогла ответить: " + (text.length < 300 ? text : text.slice(0, 300) + "…");
+  }
+
+  async function checkDsKey(key) {
+    const target = await deepseekTarget(key);
+    try {
+      const res = await realFetch(target.url, {
+        method: "POST", headers: dsHeaders(key, target.url),
+        body: JSON.stringify({ model: target.model, max_tokens: 5, messages: [{ role: "user", content: "Ответь одним словом: ок" }] }),
+        signal: AbortSignal.timeout(40000),
+      });
+      if (res.ok) return [true, "Ключ работает" + (target.url.includes("openrouter") ? " (бесплатный DeepSeek через OpenRouter)" : "")];
+      const e = await gemErrorFrom(res);
+      if (e.code === 429) return [true, "Ключ работает (сейчас лимит запросов, подожди минуту)"];
+      return [false, explainDsError(e)];
+    } catch (e) {
+      return [false, explainDsError(e)];
+    }
+  }
+
+  // Сообщения в формате OpenAI: подсказка, история (вложения — текстом; картинки и PDF видела Symphony), вопрос.
+  async function dsMessages(base, message, atts, role) {
+    const userText = async (text, list, full) => {
+      const chunks = [];
+      for (const a of list) {
+        if ((a.kind === "text" || a.kind === "doc") && full) {
+          const part = await attachmentPart(a);
+          chunks.push(part.text || `[вложение «${a.name}»]`);
+        } else if (a.kind === "image" || a.kind === "pdf") {
+          chunks.push(`[вложение «${a.name}» (${a.kind === "image" ? "картинка" : "PDF"}) — его смотрела модель Symphony]`);
+        } else chunks.push(`[раньше было вложение «${a.name}»]`);
+      }
+      chunks.push(text || DEFAULT_ATTACH_PROMPT);
+      return chunks.join("\n\n");
+    };
+    const turns = base.slice(-MAX_HISTORY);
+    const withAtts = turns.map((t, i) => (t.atts.length ? i : -1)).filter((i) => i >= 0);
+    const keep = new Set(withAtts.slice(-1));
+    const msgs = [{ role: "system", content: systemPrompt(role, "sonata") }];
+    for (let i = 0; i < turns.length; i++) {
+      const t = turns[i];
+      msgs.push(t.role === "user"
+        ? { role: "user", content: await userText(t.text, t.atts, keep.has(i)) }
+        : { role: "assistant", content: t.text || "…" });
+    }
+    while (msgs.length > 1 && msgs[1].role !== "user") msgs.splice(1, 1);
+    msgs.push({ role: "user", content: await userText(message, atts, true) });
+    return msgs;
+  }
+
+  // Спросить Sonata: потоковый ответ и свои походы за погодой, курсами и Википедией.
+  async function askDeepseek(base, message, atts, role, emit, report, signal) {
+    const key = dsKey();
+    const target = await deepseekTarget(key);
+    const msgs = await dsMessages(base, message, atts, role);
+    const sources = [];
+    const ctx = {
+      report,
+      addSource(label, url, site) {
+        if (url && sources.length < 5 && sources.every((s) => s[1] !== url && s[0] !== label)) {
+          sources.push([label, url, site || new URL(url).hostname.replace(/^www\./, "")]);
+        }
+      },
+    };
+    let tools = OPENAI_TOOLS;
+    let shown = "";
+    try {
+      for (let round = 0; round < 7; round++) {
+        let roundText = "";
+        let sep = round > 0 && shown.trim() !== "";
+        const onText = (t) => {
+          const piece = (sep ? "\n\n" : "") + t;
+          sep = false;
+          roundText += t;
+          shown += piece;
+          emit("delta", piece);
+        };
+        let calls;
+        try {
+          calls = await deepseekStream(key, target, msgs, tools, signal, onText);
+        } catch (e) {
+          if (!tools || ![400, 404].includes(e.code) || !/tool/i.test(String(e.message))) throw e;
+          tools = null; // эта бесплатная модель не умеет инструменты — отвечаем без них
+          calls = await deepseekStream(key, target, msgs, null, signal, onText);
+        }
+        if (!calls.length || round === 6) break;
+        const ids = calls.map((c, k) => c.id || `call_${round}_${k}`);
+        msgs.push({ role: "assistant", content: roundText, tool_calls: calls.map((c, k) => ({
+          id: ids[k], type: "function", function: { name: c.name, arguments: c.arguments || "{}" },
+        })) });
+        for (let k = 0; k < calls.length; k++) {
+          let args = {};
+          try { args = JSON.parse(calls[k].arguments || "{}"); } catch { /* пустые */ }
+          const result = await runTool(calls[k].name, args, ctx);
+          msgs.push({ role: "tool", tool_call_id: ids[k], content: JSON.stringify(result).slice(0, 12000) });
+        }
+      }
+      const text = shown.trim();
+      if (!text) return { text: "Ответ пришёл пустым. Попробуй переформулировать вопрос.", kind: "error" };
+      lastModel = target.model;
+      return { text, kind: "ai", sources };
+    } catch (e) {
+      if (signal && signal.aborted) return { text: shown.trim(), kind: "stopped", sources };
+      console.warn("NOVA: Sonata", e);
+      if (shown) emit("reset", null);
+      return { text: explainDsError(e), kind: "error", fallback: true };
+    }
+  }
+
+  // Коротко, почему модель недоступна: для плашки «Symphony недоступна (…) — ответила Sonata».
+  function shortReason(text) {
+    const low = String(text || "").toLowerCase();
+    if (/регион|vpn/.test(low)) return "нужен VPN";
+    if (low.includes("лимит")) return "кончился лимит";
+    if (low.includes("ключ")) return "нет ключа";
+    if (/интернет|достучаться/.test(low)) return "нет связи";
+    if (/долго|перегруж/.test(low)) return "не отвечает";
+    return "ошибка";
   }
 
   async function autoTitle(chat, question, answer) {
@@ -1026,17 +1325,54 @@
         return;
       }
       if (files.length) emit({ t: "status", text: "Изучаю " + (files.length === 1 && files[0].kind === "image" ? "картинку" : "вложения") });
-      const r = apiKey()
-        ? await askGemini(base, text, files, chat.role, (k, d) => emit({ t: k, text: d }), (s) => emit({ t: "status", text: s }), signal)
-        : { text: NO_KEY, kind: "error" };
+      const report = (s) => emit({ t: "status", text: s });
+      const delta = (k, d) => emit({ t: k, text: d });
+
+      // Картинки и PDF видит только Symphony: это сообщение (и уточнение сразу после него) берёт она.
+      const eyes = (list) => (list || []).filter((a) => a.kind === "image" || a.kind === "pdf");
+      const lastUser = [...base].reverse().find((t) => t.role === "user");
+      let first = mode();
+      if (first === "sonata" && (eyes(files).length || (lastUser && eyes(lastUser.atts).length))) {
+        if (apiKey()) {
+          report(eyes(files).length ? "Symphony смотрит вложение" : "Про вложение отвечает Symphony — она его видела");
+          first = "symphony";
+        } else if (eyes(files).length) {
+          emit({ t: "done", kind: "error", text: "Картинки и PDF видит только Symphony, а ей нужен ключ Gemini: ⚙ Настройки → «Ключ Gemini».", sources: [], chat: summary(chat) });
+          return;
+        }
+      }
+
+      // Выбранная модель, а если она недоступна (нет VPN, кончился лимит, нет ключа) — запасная.
+      let r = null;
+      let note = "";
+      let firstFail = "";
+      for (const m of [first, ...(FALLBACK[first] || [])]) {
+        if (m !== first && MODES[m].engine !== "gemini" && eyes(files).length) continue;
+        const [ok, problem] = status(m);
+        if (!ok) {
+          if (m === first) firstFail = problem;
+          continue;
+        }
+        const why = shortReason(firstFail);
+        if (m !== first) report(`${MODES[first].title} недоступна (${why}) — отвечает ${MODES[m].title}`);
+        const ask = MODES[m].engine === "deepseek" ? askDeepseek : askGemini;
+        r = await ask(base, text, files, chat.role, delta, report, signal);
+        if (r.kind !== "error" || !r.fallback) {
+          if (m !== first && r.kind !== "error") note = `${MODES[first].title} недоступна (${why}) — ответила ${MODES[m].title}`;
+          break;
+        }
+        if (m === first) firstFail = r.text;
+      }
+      if (!r || (r.kind === "error" && r.fallback)) r = { text: firstFail || (r && r.text) || status(first)[1], kind: "error" };
+
       if ((r.kind === "ai" || r.kind === "stopped") && r.text) {
-        record(chat, "ai", r.text, { sources: r.sources, stopped: r.kind === "stopped" });
+        record(chat, "ai", r.text, { sources: r.sources, stopped: r.kind === "stopped", note });
         const answers = chat.messages.filter((m) => m.role === "ai" && !m.local).length;
         if (r.kind === "ai" && answers === 1) {
           autoTitle(chat, text || "вложения: " + files.map((f) => f.name).join(", "), r.text);
         }
       }
-      emit({ t: "done", kind: r.kind, text: r.text, sources: r.sources || [], model: model(), chat: summary(chat) });
+      emit({ t: "done", kind: r.kind, text: r.text, sources: r.sources || [], note, model: model(), chat: summary(chat) });
     } catch (e) {
       console.error("NOVA:", e);
       emit({ t: "done", kind: "error", text: "Что-то пошло не так: " + e.message, sources: [] });
@@ -1172,8 +1508,22 @@
       return json(await state());
     }
     if (path === "/api/mode") {
+      if (MODES[data.mode]) {
+        settings = cleanSettings({ ...settings, mode: data.mode });
+        LS.set("settings", settings);
+      }
       lastModel = null;
       return json(await state());
+    }
+    if (path === "/api/deepseek_key") {
+      const key = String(data.key || "").replace(/\s+/g, "");
+      if (key.length < 20 || key.length > 200 || !key.startsWith("sk-")) {
+        return fail("Это не похоже на ключ DeepSeek или OpenRouter — он начинается с «sk-».");
+      }
+      const [ok, message] = await checkDsKey(key);
+      if (!ok) return fail(message);
+      LS.set("dskey", key);
+      return json({ ...(await state()), message });
     }
     if (path === "/api/open_url") {
       const url = String(data.url || "");

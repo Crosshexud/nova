@@ -467,6 +467,22 @@ kbd {
 .mi-warn { display: block; margin-top: 5px; font-size: 12px; line-height: 1.4; color: var(--danger-text); }
 .mi-check { color: var(--accent-text); }
 .model-menu-foot { margin-top: 4px; padding: 9px 10px 5px; border-top: 1px solid var(--border); font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+/* разделы меню моделей: «Без VPN в России» / «Нужен VPN в России» */
+.model-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.model-group:not(:first-child) { margin-top: 4px; border-top: 1px solid var(--border); padding-top: 12px; }
+.model-group i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.model-group.vpn i { background: #fbbf24; }
+.model-menu { max-height: min(560px, calc(100dvh - 90px)); overflow-y: auto; }
 
 .scroller {
   flex: 1;
