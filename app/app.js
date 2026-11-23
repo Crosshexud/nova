@@ -460,6 +460,7 @@
       settings: st.settings || S.settings, personas: st.personas || S.personas, key: st.key || S.key,
       dskey: st.dskey || S.dskey, groups: st.groups || S.groups, voice: st.voice || S.voice,
     });
+    if ("game" in st) S.game = st.game || "";
     renderAssistBtn();
     setTimers(st.timers);
     renderTimers();
@@ -657,7 +658,20 @@
       text = (m ? m.title + " · " : "") + (S.model || "");
       st.title = m ? `${m.title} — ${m.kind}. Внутри: ${S.model}` : "Модель " + S.model;
     }
+    const game = gameNow();
+    if (game && !S.offline && S.ready) {
+      const local = S.modes[S.mode] && S.modes[S.mode].engine === "ollama";
+      const alt = ["sonata", "symphony"].find((k) => S.modes[k] && S.modes[k].available);
+      text = "🎮 " + game; // модель — в подсказке: строка узкая
+      st.title = `Игровой режим: идёт ${game}. ` + (local && alt
+        ? `Note и Chord не занимают видеокарту — на вопросы отвечает ${S.modes[alt].title}.`
+        : "Note и Chord выгружены из видеокарты, пока идёт игра.");
+    }
     $(".status-text", st).textContent = text;
+  }
+
+  function gameNow() {
+    return S.game && S.settings && S.settings.game_mode !== false ? S.game : "";
   }
 
   // ---------- приветствие ----------
@@ -2136,7 +2150,7 @@
   const ASSIST_HINTS = [
     ["Нова, привет", "поздороваться"],
     ["Нова, открой ютуб", "сайты: вк, твич, почта…"],
-    ["Нова, открой дискорд", "программы и игры"],
+    ["Нова, запусти кс", "игры Steam и программы"],
     ["Нова, включи lo-fi", "найдёт на YouTube"],
     ["Нова, громкость 30", "или «выключи звук»"],
     ["Нова, таймер на 5 минут", "и «напомни через…»"],
@@ -2927,6 +2941,8 @@
     els.setCustom.value = s.custom || "";
     els.setAutoSpeak.checked = !!s.auto_speak;
     els.setVoiceSend.checked = !!s.voice_send;
+    $("#gameSection").hidden = !("game" in S);
+    $("#setGameMode").checked = s.game_mode !== false;
     els.setRate.value = s.rate || 1.05;
     els.rateValue.textContent = Number(els.setRate.value).toFixed(2).replace(".", ",") + "×";
     els.personas.replaceChildren();
@@ -3089,6 +3105,10 @@
     els.setCustom.addEventListener("input", () => queueSave({ custom: els.setCustom.value }, 800));
     els.setAutoSpeak.addEventListener("change", () => queueSave({ auto_speak: els.setAutoSpeak.checked }));
     $("#setMemory").addEventListener("change", (e) => queueSave({ memory: e.target.checked }));
+    $("#setGameMode").addEventListener("change", (e) => {
+      queueSave({ game_mode: e.target.checked });
+      renderStatus();
+    });
     $("#memClear").addEventListener("click", async () => {
       if (!(await confirmModal("Забыть всё?", "NOVA забудет всё, что запомнила о тебе. Чаты останутся.", "Забыть всё"))) return;
       try {
@@ -3257,9 +3277,11 @@
 
   async function ping() {
     try {
-      await api("/api/ping", {});
-      if (S.offline) {
+      const r = await api("/api/ping", {});
+      const game = (r && r.game) || "";
+      if (S.offline || (r && "game" in r && game !== S.game)) {
         S.offline = false;
+        if (r && "game" in r) S.game = game;
         renderStatus();
       }
     } catch {
