@@ -48,6 +48,8 @@
     musicSymphony: '<path d="M9 18V5l12-2v13"/><path d="m9 9 12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
     musicSonata: '<circle cx="7" cy="18" r="3"/><path d="M10 18V4c2 2.2 6 2.6 8 5.5"/><path d="M10 9.5c2 2.2 6 2.6 8 5.5"/>',
     chevron: '<path d="m6 9 6 6 6-6"/>',
+    waves: '<path d="M2 12h1.5M6 8.5v7M10 5v14M14 8v8M18 10v4M21.5 12H22"/>',
+    power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
   };
 
   const icon = (name, size = 18) =>
@@ -456,8 +458,9 @@
       ready: st.ready, problem: st.problem, mode: st.mode, modes: st.modes,
       model: st.model, chats: st.chats, current: st.current,
       settings: st.settings || S.settings, personas: st.personas || S.personas, key: st.key || S.key,
-      dskey: st.dskey || S.dskey, groups: st.groups || S.groups,
+      dskey: st.dskey || S.dskey, groups: st.groups || S.groups, voice: st.voice || S.voice,
     });
+    renderAssistBtn();
     setTimers(st.timers);
     renderTimers();
     pickVoice();
@@ -992,16 +995,22 @@
         const press = async (ok) => {
           yes.disabled = no.disabled = true;
           if (ok) yes.textContent = "Выполняю…";
+          let res;
           try {
             const r = await api("/api/action", { id: a.id, yes: ok });
-            settle(r.ok ? (ok ? "done" : "declined") : "failed", r.text || (ok ? "Готово." : "Отменено."));
+            res = { ok: !!r.ok, text: r.text || (ok ? "Готово." : "Отменено.") };
+            settle(r.ok ? (ok ? "done" : "declined") : "failed", res.text);
           } catch (e) {
-            settle("failed", "Не получилось: " + e.message);
+            res = { ok: false, text: "Не получилось: " + e.message };
+            settle("failed", res.text);
           }
           follow();
+          return res;
         };
         yes.addEventListener("click", () => press(true));
         no.addEventListener("click", () => press(false));
+        row.dataset.id = a.id;
+        row._press = press; // режим помощника нажимает кнопку голосом: «да» / «нет»
         row.append(yes, no);
         box.append(row);
       }
@@ -1087,7 +1096,7 @@
           if (ev.actions && ev.actions.length) setPcActions(ev.actions);
           rememberNote(ev.remembered);
           follow();
-          if (kind === "ai" && S.settings.auto_speak && !call.on) {
+          if (kind === "ai" && S.settings.auto_speak && !call.on && !assist.on) {
             const btn = $(".act-speak", w);
             if (btn) speak(finalText, btn);
           }
@@ -1929,7 +1938,7 @@
     const chunks = [];
     let cur = "";
     // эмодзи голос читает словами («улыбающееся лицо») — убираем
-    const plain = MD.plain(text).replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]/gu, "").replace(/[ \t]{2,}/g, " ");
+    const plain = MD.plain(text).replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}]/gu, "").replace(/[ \t]{2,}/g, " ");
     for (const part of plain.split(/(?<=[.!?…])\s+/)) {
       if ((cur + " " + part).length > 220 && cur) {
         chunks.push(cur);
@@ -1941,13 +1950,13 @@
   }
 
   // Прочитать вслух по кусочкам; без интернета онлайн-голос не работает — тогда голос Windows.
-  function sayAloud(text) {
+  function sayAloud(text, alive = () => call.on) {
     return new Promise((resolve) => {
       synth.cancel();
       const chunks = speechChunks(text);
       let i = 0;
       const next = (useLocal) => {
-        if (!call.on || i >= chunks.length) return resolve();
+        if (!alive() || i >= chunks.length) return resolve();
         const v = useLocal ? localVoice() : voice;
         const u = new SpeechSynthesisUtterance(chunks[i]);
         u.lang = v ? v.lang : "ru-RU";
@@ -2103,6 +2112,758 @@
       call.quiet = 0;
       callListen();
     }
+  }
+
+  // ---------- режим помощника: «Нова, открой ютуб» — слушает всё время и отзывается на своё имя ----------
+  // Микрофон слушает непрерывно (распознавание речи Edge), но пока не прозвучало «Нова», ничего не делает.
+  // «Нова» — короткий звук и «Слушаю»; «Нова, …» — сразу выполнить. Приветствие, время, дату NOVA отвечает
+  // сама, без нейросети (мгновенно); «открой ютуб», громкость, таймеры сервер выполняет без нейросети;
+  // остальное отвечает выбранная модель — коротко и голосом. Закрыть программу — переспросит «да или нет».
+
+  const assist = {
+    on: false, state: "idle", rec: null, restartAfter: null, err: null, retry: 0, tick: 0,
+    awakeUntil: 0, awakeFor: 1, confirm: null, pinged: false, log: [],
+    meter: null, ctx: null, raf: 0, lastT: 0, lvl: 0, spin: [0, 0, 0], bars: new Array(64).fill(0),
+  };
+  const WAKE_RE = /(^|[^a-zа-яё])(нова|nova)(?=$|[^a-zа-яё])/i;
+  const ENDW = "(?=\\s|$)"; // \b в JS не понимает русских букв
+  const STOP_RE = /^(стоп|хватит|замолчи|молчи|тихо|отмена|отмени|прекрати|ладно|неважно|ничего|забей)$/;
+  const EXIT_RE = /^(выключись|отключись|выключи режим( помощника)?|выйди( из режима)?|выход|пока|пока пока|до свидания|до встречи|спокойной ночи|отбой)$/;
+  const YES_RE = new RegExp("^(да|ага|угу|давай|конечно|закрывай|закрой|выключай|выполняй|делай|подтверждаю|ок|окей|можно|yes)" + ENDW);
+  const NO_RE = new RegExp("^(нет|не надо|не нужно|не|отмена|отмени|стоп|не закрывай|оставь|no)" + ENDW);
+  const GREET_RE = new RegExp("^(привет(ик|ствую)?|здравствуй(те)?|хай|хэй|хеллоу|hello|hi|салют|здорово|добрый (день|вечер)|доброе утро|доброй ночи|ку|йоу|прив)" + ENDW);
+  const HOWRU_RE = /^(как (у тебя )?(дела|делишки)|как ты|как жизнь|как поживаешь|как сама|что нового)$/;
+  const ASSIST_HINTS = [
+    ["Нова, привет", "поздороваться"],
+    ["Нова, открой ютуб", "сайты: вк, твич, почта…"],
+    ["Нова, открой дискорд", "программы и игры"],
+    ["Нова, включи lo-fi", "найдёт на YouTube"],
+    ["Нова, громкость 30", "или «выключи звук»"],
+    ["Нова, таймер на 5 минут", "и «напомни через…»"],
+    ["Нова, какая погода?", "и любые вопросы"],
+    ["Нова, который час?", "время и дата"],
+    ["Нова, выключись", "перестать слушать"],
+  ];
+  const ASSIST_TEXT = {
+    idle: "Скажи «Нова» — и что сделать",
+    awake: "Слушаю…",
+    thinking: "Думаю…",
+    speaking: "Говорю… «Нова, стоп» — перебить",
+    confirm: "Скажи «да» или «нет»",
+  };
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  const plainLow = (s) =>
+    String(s || "").toLowerCase().replace(/ё/g, "е").replace(/[.,!?;:«»"“”…()]+/g, " ").replace(/\s+/g, " ").trim();
+  const $assist = () => $("#assist");
+
+  const SNOVA_RE = /^\s*снова[,\s]+(?=(открой|открыть|закрой|включи|выключи|поставь|сделай|запусти|найди|покажи|скажи|расскажи|какая|какой|какое|который|сколько|убавь|прибавь|громкость|таймер|напомни|привет|загугли)(\s|$))/i;
+
+  function findWake(text) {
+    const sn = SNOVA_RE.exec(text);
+    if (sn) return { cmd: text.slice(sn[0].length).replace(/^[\s,.!?—-]+|[\s,.!?—-]+$/g, "") };
+    const m = WAKE_RE.exec(text);
+    if (!m) return null;
+    const at = m.index + m[1].length;
+    const strip = (s) => s.replace(/^[\s,.!?:;—-]+|[\s,.!?:;—-]+$/g, "");
+    const after = strip(text.slice(at + m[2].length));
+    let before = strip(text.slice(0, at));
+    if (/^(эй|хей|эй ты|окей|ок|слушай|ну|алло|а|о|так)$/i.test(before)) before = "";
+    return { cmd: after || before };
+  }
+
+  function assistUI(state, text) {
+    assist.state = state;
+    const box = $assist();
+    box.dataset.state = state;
+    box.classList.remove("woke");
+    $("#assistState").textContent = text || ASSIST_TEXT[state] || "";
+  }
+
+  function assistHeard(text, final = false) {
+    const el = $("#assistHeard");
+    el.textContent = text || "";
+    el.classList.toggle("final", !!final);
+  }
+
+  function assistLog(who, text) {
+    const t = MD.plain(text || "").trim();
+    if (!t) return;
+    assist.log.push({ who, text: t.length > 220 ? t.slice(0, 217) + "…" : t });
+    if (assist.log.length > 40) assist.log.shift();
+    renderAssistLog();
+  }
+
+  function renderAssistLog() {
+    const ol = $("#assistLog");
+    ol.innerHTML = "";
+    if (!assist.log.length) {
+      ol.innerHTML = '<li class="empty">Пока тихо. Скажи «Нова, привет».</li>';
+      return;
+    }
+    for (const e of assist.log.slice(-8)) {
+      const li = document.createElement("li");
+      li.className = e.who;
+      li.innerHTML = "<b></b><span></span>";
+      $("b", li).textContent = e.who === "you" ? (S.settings.name || "Ты") : "NOVA";
+      $("span", li).textContent = e.text;
+      ol.append(li);
+    }
+  }
+
+  function assistClock() {
+    const d = new Date();
+    $("#assistTime").textContent = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    $("#assistDate").textContent = d.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+  }
+
+  // короткие звуки: «услышала имя», «включилась», «выключилась»
+  function chime(kind = "wake") {
+    const ctx = assist.ctx;
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const notes = { wake: [740, 1110], on: [520, 780, 1040], off: [780, 520], soft: [880] }[kind] || [880];
+    const t0 = ctx.currentTime + 0.01;
+    notes.forEach((f, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const t = t0 + i * 0.085;
+      o.type = "sine";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(kind === "soft" ? 0.07 : 0.13, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + 0.24);
+      o.connect(g).connect(ctx.destination);
+      o.start(t);
+      o.stop(t + 0.26);
+    });
+  }
+
+  async function assistMeter() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      if (!assist.on || !assist.ctx) return stream.getTracks().forEach((t) => t.stop());
+      const an = assist.ctx.createAnalyser();
+      an.fftSize = 256;
+      an.smoothingTimeConstant = 0.55;
+      assist.ctx.createMediaStreamSource(stream).connect(an);
+      assist.meter = { stream, an, data: new Uint8Array(an.frequencyBinCount) };
+    } catch {
+      assist.meter = null; // нет доступа к звуку — кольца просто «дышат»
+    }
+  }
+
+  function assistListen() {
+    if (!assist.on || assist.rec || assist.restartAfter) return;
+    const r = new Recognition();
+    r.lang = "ru-RU";
+    r.continuous = true;
+    r.interimResults = true;
+    assist.rec = r;
+    r.onresult = (e) => {
+      if (assist.rec !== r) return;
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const text = (e.results[i][0].transcript || "").trim();
+        if (text) assistHear(text, e.results[i].isFinal);
+      }
+    };
+    r.onerror = (e) => {
+      if (["not-allowed", "service-not-allowed", "audio-capture", "network"].includes(e.error)) assist.err = e.error;
+    };
+    r.onend = () => {
+      if (assist.restartAfter === r) { // перезапуск, чтобы забыть эхо своего голоса
+        assist.restartAfter = null;
+        return assistListen();
+      }
+      if (assist.rec !== r) return;
+      assist.rec = null;
+      if (!assist.on) return;
+      if (assist.err) {
+        const err = assist.err;
+        assist.err = null;
+        const msg = {
+          "not-allowed": "Нет доступа к микрофону — разреши его вверху окна и нажми на шар",
+          "service-not-allowed": "Нет доступа к микрофону — разреши его вверху окна и нажми на шар",
+          "audio-capture": "Не нашла микрофон. Подключи его и нажми на шар",
+          "network": "Распознавание речи без интернета не работает — пробую снова…",
+        }[err];
+        assistUI("paused", msg);
+        if (err === "network") {
+          assist.retry = setTimeout(() => {
+            if (assist.on && assist.state === "paused") {
+              assistUI("idle");
+              assistListen();
+            }
+          }, 5000);
+        }
+        return;
+      }
+      setTimeout(assistListen, 100); // распознавание само останавливается после тишины — сразу снова слушаем
+    };
+    try {
+      r.start();
+    } catch {
+      assist.rec = null;
+      assist.retry = setTimeout(assistListen, 1000);
+    }
+  }
+
+  function assistRestart() {
+    const r = assist.rec;
+    if (!r) return assistListen();
+    assist.rec = null;
+    assist.restartAfter = r;
+    try { r.abort(); } catch { assist.restartAfter = null; setTimeout(assistListen, 150); }
+  }
+
+  function assistHear(text, final) {
+    const st = assist.state;
+    const wake = findWake(text);
+    if (st === "speaking" || st === "thinking") {
+      // перебить можно по имени: «Нова, стоп» (своё имя вместе со «стоп» NOVA сама не говорит)
+      if (final && wake && (!wake.cmd || STOP_RE.test(plainLow(wake.cmd)))) assistInterrupt();
+      return;
+    }
+    if (st === "paused") return;
+    if (st === "idle") {
+      if (!wake) {
+        assistHeard(final ? "" : text);
+        if (final && assist.pinged) {
+          assist.pinged = false; // показалось «Нова», а это было другое слово
+          assistUI("idle");
+        }
+        return;
+      }
+      assistHeard(text, final);
+      if (!final) {
+        if (!assist.pinged) { // имя прозвучало — отзываемся сразу, не дожидаясь конца фразы
+          assist.pinged = true;
+          chime("wake");
+          $assist().classList.add("woke");
+          $("#assistState").textContent = ASSIST_TEXT.awake;
+        }
+        return;
+      }
+      const chimed = assist.pinged;
+      assist.pinged = false;
+      if (!wake.cmd) {
+        $("#assistSaid").textContent = "";
+        return assistWake(8, chimed ? "" : "wake");
+      }
+      if (!chimed) chime("wake");
+      return assistDo(wake.cmd);
+    }
+    // awake / confirm — слушаем без «Нова»
+    assist.awakeUntil = Math.max(assist.awakeUntil, performance.now() + 2500); // ещё говорит — ждём
+    assistHeard(text, final);
+    if (!final) return;
+    const cmd = wake ? wake.cmd : text;
+    if (st === "confirm") return assistConfirm(cmd);
+    if (!cmd) return assistWake(8, "soft");
+    assistDo(cmd);
+  }
+
+  function assistWake(sec = 8, sound = "wake") {
+    if (sound) chime(sound);
+    assist.awakeFor = sec * 1000;
+    assist.awakeUntil = performance.now() + assist.awakeFor;
+    assistUI("awake");
+  }
+
+  function assistInterrupt() {
+    if (assist.state === "thinking") stop();
+    if (synth) synth.cancel();
+    assistUI("idle");
+    assistHeard("");
+    chime("off");
+  }
+
+  // ответы без нейросети — мгновенно
+  function assistLocal(cmd) {
+    const c = plainLow(cmd);
+    if (!c || STOP_RE.test(c)) return { stop: true };
+    if (EXIT_RE.test(c)) return { text: pick(["Пока! Если что — я в NOVA.", "Выключаюсь. Зови, если что!"]), exit: true };
+    const name = (S.settings.name || "").trim();
+    const g = GREET_RE.exec(c);
+    if (g) {
+      const rest = c.slice(g[0].length).trim();
+      if (rest && !HOWRU_RE.test(rest)) { // «привет, открой ютуб» — приветствие отбрасываем, остальное выполняем
+        const words = g[0].trim().split(" ").length;
+        return { rewrite: cmd.trim().split(/\s+/).slice(words).join(" ").replace(/^[\s,.!?—-]+/, "") };
+      }
+      const h = new Date().getHours();
+      const hi = /^(привет|хай|хэй|хеллоу|hello|hi|салют|здорово|ку|йоу|прив)/.test(c) ? "Привет"
+        : h >= 5 && h < 12 ? "Доброе утро" : h >= 12 && h < 18 ? "Добрый день" : h >= 18 && h < 23 ? "Добрый вечер" : "Доброй ночи";
+      const to = name ? ", " + name : "";
+      if (rest) return { text: `${hi}${to}! У меня всё отлично, готова помогать. А у тебя как?` };
+      return { text: `${hi}${to}! ` + pick(["Чем помочь?", "Я слушаю.", "Что сделаем?"]) };
+    }
+    if (HOWRU_RE.test(c)) return { text: pick(["Всё отлично, готова помогать! А у тебя как?", "Отлично! Чем займёмся?"]) };
+    if (/(который час|сколько (сейчас )?времени|сколько время|какое (сейчас )?время)/.test(c)) {
+      return { text: "Сейчас " + new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) + "." };
+    }
+    if (/(какое (сегодня )?число|какой (сегодня )?день( недели)?|какая (сегодня )?дата|что (сегодня )?за день)/.test(c)) {
+      return { text: "Сегодня " + new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" }) + "." };
+    }
+    if (/^(спасибо|спс|благодарю|пасиб|сенкс|thanks|thank you)/.test(c)) return { text: pick(["Обращайся!", "Всегда пожалуйста!", "Рада помочь!"]) };
+    if (/^(ты (тут|здесь)|ты меня слышишь|слышишь меня|ты слышишь)$/.test(c)) return { text: "Да, я тут!" };
+    return null;
+  }
+
+  async function assistSay(text) {
+    const plain = MD.plain(text || "").trim();
+    assistLog("nova", plain);
+    $("#assistSaid").textContent = plain.length > 300 ? plain.slice(0, 297) + "…" : plain;
+    if (!plain || !synth || !assist.on) return;
+    assistUI("speaking");
+    await sayAloud(text, () => assist.on && assist.state === "speaking");
+    if (assist.on) assistRestart(); // забыть то, что микрофон услышал из колонок
+  }
+
+  function assistAfter(text) {
+    if (!assist.on) return;
+    assistHeard("");
+    // NOVA спросила — можно ответить сразу, без «Нова»
+    if (/\?\s*$/.test(MD.plain(text || "").trim())) assistWake(7, "soft");
+    else assistUI("idle");
+  }
+
+  async function assistDo(cmd) {
+    cmd = String(cmd || "").replace(/^[\s,.!?—-]+/, "").trim();
+    const local = assistLocal(cmd);
+    if (local && local.rewrite) cmd = local.rewrite;
+    assistLog("you", cmd);
+    assistHeard(cmd, true);
+    if (local && !local.rewrite) {
+      if (local.stop) return assistUI("idle");
+      await assistSay(local.text);
+      if (local.exit) return closeAssist();
+      return assistAfter(local.text);
+    }
+    if (S.busy) {
+      await assistSay("Секунду, я ещё отвечаю на прошлое.");
+      return assistAfter("");
+    }
+    assistUI("thinking");
+    $("#assistSaid").textContent = "";
+    const ev = await send(cmd, { voice: true });
+    if (!assist.on) return;
+    if (!ev) {
+      await assistSay("Не получилось отправить. Попробуй ещё раз.");
+      return assistAfter("");
+    }
+    if (ev.kind === "stopped") return assistUI("idle");
+    const pending = (ev.actions || []).filter((a) => !a.state || a.state === "pending");
+    if (pending.length) { // «закрой хром» — переспросить голосом вместо кнопки
+      const a = pending[0];
+      assist.confirm = { id: a.id };
+      await assistSay(a.label + "? Скажи «да» или «нет».");
+      if (!assist.on || !assist.confirm) return;
+      assist.awakeFor = 12000;
+      assist.awakeUntil = performance.now() + assist.awakeFor;
+      return assistUI("confirm");
+    }
+    let text = ev.text || "";
+    if (ev.kind === "error") text = "Не получилось. " + MD.plain(text).slice(0, 160);
+    await assistSay(text || "Готово.");
+    assistAfter(text);
+  }
+
+  async function assistConfirm(cmd) {
+    const c = plainLow(cmd);
+    const job = assist.confirm;
+    const yes = YES_RE.test(c);
+    const no = !yes && NO_RE.test(c);
+    assist.confirm = null;
+    if (!job || (!yes && !no)) return cmd ? assistDo(cmd) : assistUI("idle"); // ответили другой командой
+    assistLog("you", cmd);
+    assistUI("thinking");
+    const row = els.thread.querySelector(`.pc-action[data-id="${CSS.escape(job.id)}"]`);
+    let r;
+    if (row && row._press) r = await row._press(yes);
+    else {
+      try {
+        const x = await api("/api/action", { id: job.id, yes });
+        r = { ok: !!x.ok, text: x.text || "" };
+      } catch (e) {
+        r = { ok: false, text: e.message };
+      }
+    }
+    await assistSay(yes ? (r.ok ? r.text || "Готово." : "Не получилось. " + r.text) : "Хорошо, не буду.");
+    assistAfter("");
+  }
+
+  function assistTick() {
+    assistClock();
+    if (assist.engine) return; // ожидание считает NOVA на компьютере
+    if ((assist.state === "awake" || assist.state === "confirm") && performance.now() > assist.awakeUntil) {
+      if (assist.state === "confirm") {
+        assist.confirm = null;
+        assistLog("nova", "Не услышала ответ — кнопка осталась в чате.");
+      }
+      assistUI("idle");
+      assistHeard("");
+    }
+  }
+
+  function assistOrbClick() {
+    if (assist.engine) return void api("/api/voice", { action: "tap" }).then(applyVoice).catch(() => {});
+    const st = assist.state;
+    if (st === "speaking" || st === "thinking") return assistInterrupt();
+    if (st === "paused") {
+      assistUI("idle");
+      return assistListen();
+    }
+    if (st === "awake" && assist.rec) return assist.rec.stop(); // договорил — разобрать сказанное сразу
+    if (st === "idle") assistWake(8);
+  }
+
+  // кольца вокруг шара: внешняя шкала, дуги, «спектр» голоса, отсчёт ожидания и светящееся ядро
+  function drawAssist(t) {
+    if (!assist.on) return;
+    assist.raf = requestAnimationFrame(drawAssist);
+    const c = $("#assistCanvas");
+    const size = c.clientWidth;
+    if (!size) return;
+    const d = window.devicePixelRatio || 1;
+    if (c.width !== Math.round(size * d)) c.width = c.height = Math.round(size * d);
+    const g = c.getContext("2d");
+    g.setTransform(d, 0, 0, d, 0, 0);
+    g.clearRect(0, 0, size, size);
+    const dt = Math.min(0.05, assist.lastT ? (t - assist.lastT) / 1000 : 0);
+    assist.lastT = t;
+
+    const st = assist.state;
+    const woke = $assist().classList.contains("woke");
+    const listening = st === "awake" || st === "confirm" || woke;
+    const N = assist.bars.length;
+    let lvl = 0;
+    const m = assist.meter;
+    const raw = new Array(N).fill(0);
+    if (m) {
+      m.an.getByteFrequencyData(m.data);
+      const half = N / 2;
+      for (let i = 0; i < half; i++) {
+        const v = m.data[2 + Math.floor(i * 1.6)] / 255;
+        raw[half - 1 - i] = raw[half + i] = v; // зеркально
+        lvl += v;
+      }
+      lvl /= half;
+    }
+    const talk = st === "speaking" ? 0.32 + 0.22 * Math.sin(t / 110) * Math.sin(t / 47) : 0;
+    const target = listening ? Math.min(1, lvl * 2.2) : talk;
+    assist.lvl += (target - assist.lvl) * Math.min(1, dt * 10);
+    for (let i = 0; i < N; i++) {
+      const want = listening ? Math.pow(raw[i], 1.4) : st === "speaking" ? talk * (0.5 + 0.5 * Math.sin(t / 160 + i * 0.7)) : 0.05;
+      const s = assist.bars[i];
+      assist.bars[i] = s + (want - s) * Math.min(1, dt * (want > s ? 18 : 5));
+    }
+    const speed = st === "thinking" ? 3 : listening ? 1.2 : st === "speaking" ? 0.9 : st === "paused" ? 0.05 : 0.35;
+    assist.spin[0] += dt * 0.12 * speed;
+    assist.spin[1] -= dt * 0.3 * speed;
+    assist.spin[2] += dt * 1.6 * speed;
+
+    const col = getComputedStyle($assist()).getPropertyValue("--c").trim() || "167, 139, 250";
+    const rgba = (a) => `rgba(${col}, ${a})`;
+    const dim = st === "idle" && !woke ? 0.6 : 1;
+    const cx = size / 2;
+    const R = size / 2;
+    g.lineCap = "round";
+
+    // 1) внешняя шкала
+    g.save();
+    g.translate(cx, cx);
+    g.rotate(assist.spin[0]);
+    for (let i = 0; i < 120; i++) {
+      const a = (i / 120) * Math.PI * 2;
+      const long = i % 10 === 0;
+      const r1 = R * 0.955;
+      const r0 = r1 - (long ? R * 0.05 : R * 0.022);
+      g.strokeStyle = rgba((long ? 0.75 : 0.32) * dim);
+      g.lineWidth = long ? 2 : 1;
+      g.beginPath();
+      g.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
+      g.lineTo(Math.cos(a) * r1, Math.sin(a) * r1);
+      g.stroke();
+    }
+    g.restore();
+
+    // 2) тонкое кольцо и три вращающиеся дуги
+    g.strokeStyle = rgba(0.18 * dim);
+    g.lineWidth = 1;
+    g.beginPath();
+    g.arc(cx, cx, R * 0.85, 0, Math.PI * 2);
+    g.stroke();
+    g.strokeStyle = rgba(0.85 * dim);
+    g.lineWidth = 3;
+    for (let k = 0; k < 3; k++) {
+      const a = assist.spin[1] + (k * Math.PI * 2) / 3;
+      g.beginPath();
+      g.arc(cx, cx, R * 0.85, a, a + 1.05);
+      g.stroke();
+    }
+    g.strokeStyle = rgba(0.35 * dim);
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.arc(cx, cx, R * 0.79, -assist.spin[1] * 0.7, -assist.spin[1] * 0.7 + Math.PI * 1.4);
+    g.stroke();
+
+    // 3) «спектр» голоса — лучи по кругу
+    g.save();
+    g.translate(cx, cx);
+    g.rotate(-Math.PI / 2 + assist.spin[0] * 0.4);
+    g.lineWidth = Math.max(2, (R * 2 * Math.PI * 0.66) / N * 0.42);
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const len = R * 0.025 + assist.bars[i] * R * 0.14;
+      const r0 = R * 0.62;
+      g.strokeStyle = rgba((0.35 + assist.bars[i] * 0.65) * dim);
+      g.beginPath();
+      g.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
+      g.lineTo(Math.cos(a) * (r0 + len), Math.sin(a) * (r0 + len));
+      g.stroke();
+    }
+    g.restore();
+
+    // 4) отсчёт: сколько ещё слушаю без «Нова»; когда думаю — бегущие дуги
+    if (st === "awake" || st === "confirm") {
+      const left = Math.max(0, (assist.awakeUntil - performance.now()) / assist.awakeFor);
+      g.strokeStyle = rgba(0.9);
+      g.lineWidth = 3;
+      g.beginPath();
+      g.arc(cx, cx, R * 0.535, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, left));
+      g.stroke();
+    } else if (st === "thinking") {
+      g.strokeStyle = rgba(0.9);
+      g.lineWidth = 3;
+      for (let k = 0; k < 2; k++) {
+        const a = assist.spin[2] + k * Math.PI;
+        g.beginPath();
+        g.arc(cx, cx, R * 0.535, a, a + 0.9);
+        g.stroke();
+      }
+    }
+    g.strokeStyle = rgba(0.14 * dim);
+    g.lineWidth = 1;
+    g.beginPath();
+    g.arc(cx, cx, R * 0.535, 0, Math.PI * 2);
+    g.stroke();
+
+    // 5) ядро
+    const coreR = R * (0.4 + assist.lvl * 0.07);
+    const glow = g.createRadialGradient(cx, cx, coreR * 0.2, cx, cx, coreR * 1.5);
+    glow.addColorStop(0, rgba(0.55 * dim));
+    glow.addColorStop(0.55, rgba(0.16 * dim));
+    glow.addColorStop(1, rgba(0));
+    g.fillStyle = glow;
+    g.beginPath();
+    g.arc(cx, cx, coreR * 1.5, 0, Math.PI * 2);
+    g.fill();
+    const core = g.createRadialGradient(cx - coreR * 0.3, cx - coreR * 0.35, coreR * 0.1, cx, cx, coreR);
+    core.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+    core.addColorStop(0.35, rgba(0.95));
+    core.addColorStop(1, "rgba(30, 20, 80, 0.9)");
+    g.fillStyle = core;
+    g.globalAlpha = 0.55 + 0.45 * dim;
+    g.beginPath();
+    g.arc(cx, cx, coreR, 0, Math.PI * 2);
+    g.fill();
+    g.globalAlpha = 1;
+  }
+
+  const useEngine = () => !!(S.voice && S.voice.available);
+
+  async function openAssist() {
+    const engine = useEngine();
+    if (!engine && (!Recognition || !synth)) return toast("Режим помощника работает в окне NOVA (Edge или Chrome)", "error");
+    if (S.busy) return toast("Подожди, NOVA ещё отвечает");
+    if (call.on) closeCall();
+    stopSpeaking();
+    if (rec) rec.stop();
+    closeMobileSidebar();
+    try {
+      assist.ctx = new AudioContext(); // создаём по нажатию — иначе браузер не даст играть звуки
+    } catch {
+      assist.ctx = null;
+    }
+    Object.assign(assist, { on: true, err: null, confirm: null, pinged: false, awakeUntil: 0, lastT: 0, lvl: 0 });
+    assist.bars.fill(0);
+    $assist().hidden = false;
+    $("#assistSaid").textContent = "";
+    assistHeard("");
+    assistUI("idle");
+    renderAssistLog();
+    const mode = S.modes && S.modes[S.mode];
+    $("#assistMode").textContent = "На вопросы отвечает " + (mode && mode.title ? mode.title : "NOVA") + " · Esc — выйти";
+    $("#assistOpts").hidden = !engine;
+    assist.engine = engine;
+    assistClock();
+    assist.tick = setInterval(assistTick, 250);
+    assist.raf = requestAnimationFrame(drawAssist);
+    if (engine) {
+      assistMeter();
+      return engineOpen();
+    }
+    chime("on");
+    // голосовые команды — в отдельный чат, чтобы не мешать текущему разговору
+    if (S.current && S.current.messages.length) {
+      try {
+        applyState(await api("/api/new", {}));
+      } catch { /* не вышло — команды попадут в текущий чат */ }
+    }
+    if (!assist.on) return;
+    assistMeter();
+    assistListen();
+  }
+
+  function closeAssist() {
+    if (!assist.on) return;
+    assist.on = false;
+    clearInterval(assist.tick);
+    clearTimeout(assist.retry);
+    clearTimeout(assist.poll);
+    if (assist.engine) { // помощник на компьютере: выключить, если «слушать в фоне» не включено
+      assist.engine = false;
+      api("/api/voice", { on: false }).then(applyVoice).catch(() => {});
+      if (assist.meter) assist.meter.stream.getTracks().forEach((t) => t.stop());
+      assist.meter = null;
+      if (assist.ctx) assist.ctx.close().catch(() => {});
+      assist.ctx = null;
+      cancelAnimationFrame(assist.raf);
+      assist.raf = 0;
+      $assist().hidden = true;
+      els.input.focus();
+      return;
+    }
+    cancelAnimationFrame(assist.raf);
+    assist.raf = 0;
+    const r = assist.rec || assist.restartAfter;
+    assist.rec = assist.restartAfter = null;
+    if (r) {
+      try { r.abort(); } catch { /* уже остановлено */ }
+    }
+    if (synth) synth.cancel();
+    if (S.busy && S.controller) S.controller.abort();
+    if (assist.meter) assist.meter.stream.getTracks().forEach((t) => t.stop());
+    assist.meter = null;
+    const ctx = assist.ctx;
+    if (ctx) {
+      chime("off");
+      setTimeout(() => ctx.close().catch(() => {}), 500);
+    }
+    assist.ctx = null;
+    $assist().hidden = true;
+    els.input.focus();
+  }
+
+  // ---------- помощник через NOVA на компьютере (Whisper): слышит точнее и работает при закрытом окне ----------
+
+  async function engineOpen() {
+    Object.assign(assist, { rev: -1, chatRev: null, seenOn: false });
+    try {
+      applyVoice(await api("/api/voice", { on: true }));
+    } catch (e) {
+      toast("Не получилось включить помощника: " + e.message, "error");
+    }
+    enginePoll();
+  }
+
+  async function enginePoll() {
+    clearTimeout(assist.poll);
+    if (!assist.on || !assist.engine) return;
+    try {
+      applyVoice(await api("/api/voice"));
+    } catch { /* NOVA занята — спросим ещё раз */ }
+    if (assist.on && assist.engine) assist.poll = setTimeout(enginePoll, 160);
+  }
+
+  function applyVoice(v) {
+    if (!v) return;
+    S.voice = { ...(S.voice || {}), available: v.available, why: v.why, bg: v.bg, autostart: v.autostart, running: v.running };
+    renderAssistBtn();
+    if (!assist.on || !assist.engine) return;
+    $("#assistBg").checked = !!v.bg;
+    $("#assistAuto").checked = !!v.autostart;
+    if (v.error) assistUI("paused", v.error);
+    if (v.state === "off") {
+      if (assist.seenOn) closeAssist(); // «Нова, выключись»
+      return;
+    }
+    assist.seenOn = true;
+    if (v.rev !== assist.rev) {
+      assist.rev = v.rev;
+      const paused = v.state === "loading" || v.state === "error";
+      assistUI(paused ? "paused" : v.state,
+        v.state === "loading" ? "Готовлю распознавание речи…" : v.state === "error" ? v.problem : "");
+      assistHeard(v.heard || "", true);
+      $("#assistSaid").textContent = v.said || "";
+      assist.log = (v.log || []).map((e) => ({ who: e.who, text: e.text }));
+      renderAssistLog();
+    }
+    if (v.state === "awake" || v.state === "confirm") {
+      assist.awakeFor = Math.max(1, (v.awake_for || 8) * 1000);
+      assist.awakeUntil = performance.now() + (v.awake_left || 0) * 1000;
+    }
+    if (v.chat_rev !== assist.chatRev) { // голосовая команда записалась в чат «Голосовой помощник»
+      const first = assist.chatRev === null;
+      assist.chatRev = v.chat_rev;
+      if (!first && !S.busy) syncState();
+    }
+  }
+
+  function renderAssistBtn() {
+    const btn = $("#assistBtn");
+    if (!btn) return;
+    const live = !!(S.voice && S.voice.running && S.voice.bg);
+    btn.classList.toggle("live", live);
+    const badge = $(".assist-badge", btn);
+    if (badge) badge.textContent = live ? "СЛУШАЕТ" : "ГОЛОС";
+    btn.title = live ? "NOVA слушает в фоне — скажи «Нова, …». Нажми, чтобы открыть экран помощника"
+      : "Скажи «Нова, открой ютуб» — и она сделает. Без клавиатуры";
+  }
+
+  function bindAssist() {
+    const btn = $("#assistBtn");
+    if (!btn || !$assist()) return; // версия для телефона — без этого раздела
+    if (!useEngine() && (!Recognition || !synth)) {
+      btn.hidden = true;
+      return;
+    }
+    btn.addEventListener("click", openAssist);
+    $("#assistBg").addEventListener("change", (e) => {
+      const on = e.target.checked;
+      api("/api/voice", { bg: on }).then((v) => {
+        applyVoice(v);
+        toast(on ? "NOVA слушает в фоне: скажи «Нова, …», даже когда окно закрыто" : "Фоновое прослушивание выключено");
+      }).catch((err) => toast("Не получилось: " + err.message, "error"));
+    });
+    $("#assistAuto").addEventListener("change", (e) => {
+      const on = e.target.checked;
+      api("/api/voice", { autostart: on }).then((v) => {
+        applyVoice(v);
+        toast(on ? "NOVA будет запускаться вместе с Windows (без окна)" : "Автозапуск выключен");
+      }).catch((err) => toast("Не получилось: " + err.message, "error"));
+    });
+    $("#assistEnd").addEventListener("click", closeAssist);
+    $("#assistOrb").addEventListener("click", assistOrbClick);
+    const ul = $("#assistHints");
+    for (const [say, what] of ASSIST_HINTS) {
+      const li = document.createElement("li");
+      li.innerHTML = '<button type="button"><b></b><span></span></button>';
+      $("b", li).textContent = "«" + say + "»";
+      $("span", li).textContent = what;
+      $("button", li).addEventListener("click", () => {
+        if (assist.engine) {
+          return void api("/api/voice", { action: "say", text: say.replace(/^Нова,\s*/, "") }).then(applyVoice).catch(() => {});
+        }
+        if (assist.state !== "idle" && assist.state !== "awake") return;
+        chime("wake");
+        assistDo(say.replace(/^Нова,\s*/, ""));
+      });
+      ul.append(li);
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (assist.on && !document.hidden && !assist.rec && !assist.restartAfter && assist.state !== "paused") assistListen();
+    });
   }
 
   // ---------- настройки ----------
@@ -2637,6 +3398,7 @@
         if (!els.lightbox.hidden) return (els.lightbox.hidden = true);
         if (!els.modal.hidden) return closeModal(false);
         if (call.on) return closeCall();
+        if (assist.on) return closeAssist();
         if (modelMenu() && !modelMenu().hidden) return closeModelMenu();
         if (!els.chatMenu.hidden) return closeChatMenu();
         if (!els.roleModal.hidden) return closeRoleModal();
@@ -2687,6 +3449,7 @@
       $("#callOrb").addEventListener("click", callOrbClick);
       $("#callEnd").addEventListener("click", closeCall);
     } else $("#callBtn").hidden = true;
+    bindAssist();
     $("#timerPill").addEventListener("click", (e) => {
       e.stopPropagation();
       const menu = $("#timerMenu");

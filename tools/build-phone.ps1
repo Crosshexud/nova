@@ -54,6 +54,11 @@ foreach ($k in $swaps.Keys) {
   if (-not $html.Contains($k)) { throw "В ui/index.html не нашлось: $k — обнови build-phone.ps1" }
   $html = $html.Replace($k, $swaps[$k])
 }
+# Режим помощника «Нова, …» на телефоне не нужен: Android пищит при каждом перезапуске распознавания,
+# а для разговора голосом есть кнопка-трубка. Без кнопки app.js сам не включает этот раздел.
+$assistBtn = [regex]'\s*<button class="assist-btn" id="assistBtn"[\s\S]*?</button>'
+if (-not $assistBtn.IsMatch($html)) { throw "В ui/index.html не нашлась кнопка помощника (assistBtn) — обнови build-phone.ps1" }
+$html = $assistBtn.Replace($html, "", 1)
 [System.IO.File]::WriteAllText((Join-Path $app "index.html"), $html, $utf8)
 
 # новая версия кэша, чтобы телефоны точно взяли свежие файлы

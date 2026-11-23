@@ -462,6 +462,7 @@ th.c { text-align: center; }
       <a href="#models">Модели</a>
       <a href="#offline">Без интернета</a>
       <a href="#features">Возможности</a>
+      <a href="#assistant">Помощник</a>
       <a href="#install">Установка</a>
       <a href="#faq">Вопросы</a>
       <a href="app/">Для телефона</a>
@@ -478,11 +479,11 @@ th.c { text-align: center; }
     <div>
       <span class="eyebrow">ИИ-ассистент для Windows · бесплатно</span>
       <h1>Четыре нейросети.<br><em>Две без интернета.</em></h1>
-      <p class="lead">Note и Chord думают прямо на твоей видеокарте: без интернета, ключей и лимитов. Sonata (GigaChat от Сбера) работает в России без VPN, Symphony подключает Gemini от Google. NOVA открывает программы, ставит таймеры, помнит важное о тебе и разговаривает голосом. Чаты хранятся только у тебя на компьютере.</p>
+      <p class="lead">Note и Chord думают прямо на твоей видеокарте: без интернета, ключей и лимитов. Sonata (GigaChat от Сбера) работает в России без VPN, Symphony подключает Gemini от Google. Скажи «Нова, открой ютуб», и она сделает: NOVA откликается на своё имя, открывает программы и сайты, ставит таймеры и помнит важное о тебе. Чаты хранятся только у тебя на компьютере.</p>
       <div class="hero-actions">
         <a class="btn primary" href="NOVA.zip" download>
           <svg aria-hidden="true"><use href="#i-download"/></svg>
-          Скачать NOVA <small>.zip · 162 КБ</small>
+          Скачать NOVA <small>.zip · 197 КБ</small>
         </a>
         <a class="btn" href="app/">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
@@ -729,6 +730,7 @@ th.c { text-align: center; }
           <li><b>Помощь с кодом и текстами</b>Найти ошибку, переписать, объяснить.</li>
           <li><b>Файлы с кодом, тексты и Word</b>Перетаскиваешь в окно, модель читает.</li>
           <li><b>Все чаты</b>История, поиск, роли, скачивание и автоназвания.</li>
+          <li><b>Фоновый помощник</b>«Нова, …» слышит и без сети: речь распознаётся на компьютере.</li>
         </ul>
       </div>
       <div class="off-col waits">
@@ -801,7 +803,22 @@ th.c { text-align: center; }
       <div class="shot"><img src="img/call.jpg" width="1920" height="1200" loading="lazy" alt="Голосовой разговор с NOVA: светящийся шар, вопрос пользователя и ответ NOVA"></div>
     </div>
 
-    <div class="feature flip">
+    <div class="feature flip" id="assistant">
+      <div class="text-block">
+        <span class="eyebrow">Режим помощника</span>
+        <h3>Скажи «Нова», и она сделает</h3>
+        <p>Включи режим помощника и говори, не трогая клавиатуру: «Нова, открой ютуб», «Нова, громкость 30», «Нова, какая погода?». NOVA откликается только на своё имя, отвечает голосом и ведёт журнал разговора.</p>
+        <ul class="ticks">
+          <li>Фоновый режим: слышит, даже когда окно закрыто, и может запускаться вместе с Windows</li>
+          <li>В фоновом режиме речь распознаётся прямо на компьютере, звук с микрофона никуда не уходит</li>
+          <li>Открывает сайты по названию: вк, ютуб, твич, тикток, почта, карты</li>
+          <li>«Нова, стоп» перебивает, а закрыть программу она может только после твоего «да»</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="img/assist.jpg" width="1920" height="1200" loading="lazy" alt="Экран режима помощника: светящийся шар NOVA, подсказки команд слева и журнал разговора справа"></div>
+    </div>
+
+    <div class="feature">
       <div class="text-block">
         <span class="eyebrow">Роли и история</span>
         <h3>Свой характер в каждом чате</h3>
@@ -815,7 +832,7 @@ th.c { text-align: center; }
       <div class="shot"><img src="img/menu.png" width="1920" height="1200" loading="lazy" alt="Меню чата: роль, переименование, скачать .md и .json, удалить"></div>
     </div>
 
-    <div class="feature">
+    <div class="feature flip">
       <div class="text-block">
         <span class="eyebrow">Компьютер</span>
         <h3>Открывает и закрывает программы</h3>
@@ -830,7 +847,7 @@ th.c { text-align: center; }
       <div class="shot"><img src="img/pc.jpg" width="1920" height="1200" loading="lazy" alt="NOVA открыла Калькулятор, а на «закрой калькулятор» показывает кнопки «Закрыть Calculator» и «Не надо»"></div>
     </div>
 
-    <div class="feature flip">
+    <div class="feature">
       <div class="text-block">
         <span class="eyebrow">Таймеры</span>
         <h3>Напомнит, даже если окно закрыто</h3>
@@ -844,7 +861,7 @@ th.c { text-align: center; }
       <div class="shot"><img src="img/timers.jpg" width="1920" height="1200" loading="lazy" alt="В шапке NOVA колокольчик с обратным отсчётом и список: таймер и напоминание выключить духовку"></div>
     </div>
 
-    <div class="feature">
+    <div class="feature flip">
       <div class="text-block">
         <span class="eyebrow">Память</span>
         <h3>Помнит важное о тебе</h3>
@@ -873,7 +890,7 @@ th.c { text-align: center; }
     <div class="section-head">
       <span class="eyebrow">Установка</span>
       <h2>Три шага и один по желанию</h2>
-      <p class="lead">Первые три шага занимают около минуты, после них работают Sonata и Symphony. Четвёртый добавляет Note и Chord, тут всё зависит от скорости интернета: модели весят 2,5 и 5,2 ГБ.</p>
+      <p class="lead">Первые три шага занимают около минуты, после них работают Sonata и Symphony. Четвёртый добавляет Note, Chord и фоновый помощник, тут всё зависит от скорости интернета: модели весят 2,5 и 5,2 ГБ, распознавание речи — около 0,6 ГБ.</p>
     </div>
     <div class="steps">
       <div class="step">
@@ -891,8 +908,8 @@ th.c { text-align: center; }
       </div>
       <div class="step optional">
         <span class="badge">по желанию</span>
-        <h3>Добавь Note и Chord</h3>
-        <p>Установи Ollama с <a href="https://ollama.com/download">ollama.com</a> и скачай модели командами ниже. Можно взять только одну.</p>
+        <h3>Добавь Note, Chord и голос</h3>
+        <p>Установи Ollama с <a href="https://ollama.com/download">ollama.com</a> и скачай модели командами ниже. Третья команда включает фоновый помощник. Всё ставится по отдельности.</p>
       </div>
     </div>
 
@@ -907,6 +924,11 @@ th.c { text-align: center; }
         <pre id="cmd-chord">ollama pull qwen3:8b</pre>
         <span class="what">Chord · 5,2 ГБ</span>
         <button class="copy" type="button" data-copy="cmd-chord">Копировать</button>
+      </div>
+      <div class="cmd">
+        <pre id="cmd-voice">py -m pip install faster-whisper edge-tts</pre>
+        <span class="what">Фоновый помощник · ~0,6 ГБ</span>
+        <button class="copy" type="button" data-copy="cmd-voice">Копировать</button>
       </div>
     </div>
 
@@ -950,7 +972,11 @@ th.c { text-align: center; }
       </details>
       <details>
         <summary>Есть версия для телефона?</summary>
-        <p>Да, для Android: открой <a href="app/">crosshexud.github.io/nova/app</a> в Chrome и нажми «Установить NOVA на телефон» (или «⋮» → «Установить приложение»). На телефоне работают Symphony (ключ Gemini, в России нужен VPN) и Sonata на DeepSeek (ключ DeepSeek или OpenRouter; ключ GigaChat работает только на компьютере). Есть погода, курсы ЦБ, Википедия, картинки и PDF, долгая память, голосовой разговор и таймеры (пока приложение открыто). Новостей пока нет, а Note, Chord и управление компьютером есть только на компьютере. Версии для Mac пока нет.</p>
+        <p>Да, для Android: открой <a href="app/">crosshexud.github.io/nova/app</a> в Chrome и нажми «Установить NOVA на телефон» (или «⋮» → «Установить приложение»). На телефоне работают Symphony (ключ Gemini, в России нужен VPN) и Sonata на DeepSeek (ключ DeepSeek или OpenRouter; ключ GigaChat работает только на компьютере). Есть погода, курсы ЦБ, Википедия, картинки и PDF, долгая память, голосовой разговор и таймеры (пока приложение открыто). Новостей пока нет, а Note, Chord, управление компьютером и режим помощника «Нова, …» есть только на компьютере. Версии для Mac пока нет.</p>
+      </details>
+      <details>
+        <summary>Помощник слушает всё, что я говорю?</summary>
+        <p>Он слышит микрофон, но реагирует только на своё имя «Нова», а остальное не записывает. В фоновом режиме речь распознаётся прямо на компьютере, и звук никуда не отправляется. Дальше уходит лишь текст команды: той модели, что отвечает (с Note и Chord он не покидает компьютер). Без фонового режима речь распознаёт Edge через сервис Microsoft, и только пока открыт экран помощника. Выключить его можно фразой «Нова, выключись» или кнопкой «Выключить».</p>
       </details>
       <details>
         <summary>Что делать, если что-то не работает?</summary>
@@ -965,13 +991,13 @@ th.c { text-align: center; }
     <p class="lead">Скачай архив, запусти установщик и задай первый вопрос. Хоть с интернетом, хоть без.</p>
     <a class="btn primary" href="NOVA.zip" download>
       <svg aria-hidden="true"><use href="#i-download"/></svg>
-      Скачать NOVA <small>.zip · 162 КБ</small>
+      Скачать NOVA <small>.zip · 197 КБ</small>
     </a>
   </div>
 </main>
 
 <footer class="wrap foot">
-  <span>NOVA 3.1 · Note, Chord, Sonata и Symphony для Windows</span>
+  <span>NOVA 3.2 · Note, Chord, Sonata и Symphony для Windows</span>
   <span>Python · Edge · Ollama · GigaChat · Google Gemini</span>
 </footer>
 

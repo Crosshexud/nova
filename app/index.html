@@ -269,6 +269,38 @@
     <button class="call-end" id="callEnd" type="button"><span data-icon="phone"></span>Закончить</button>
   </div>
 
+  <div class="assist" id="assist" hidden data-state="idle">
+    <div class="assist-grid" aria-hidden="true"></div>
+    <header class="assist-top">
+      <div class="assist-title"><span class="assist-dot"></span><span>NOVA</span><em>режим помощника</em></div>
+      <div class="assist-clock"><b id="assistTime"></b><span id="assistDate"></span></div>
+    </header>
+    <aside class="assist-panel left">
+      <h4>Скажи, например</h4>
+      <ul id="assistHints"></ul>
+    </aside>
+    <main class="assist-center">
+      <button class="assist-orb" id="assistOrb" type="button" title="Нажми, чтобы NOVA слушала без «Нова», или чтобы перебить">
+        <canvas id="assistCanvas"></canvas><span class="assist-name">NOVA</span>
+      </button>
+      <div class="assist-state" id="assistState"></div>
+      <div class="assist-heard" id="assistHeard"></div>
+      <div class="assist-said" id="assistSaid"></div>
+    </main>
+    <aside class="assist-panel right">
+      <h4>Журнал</h4>
+      <ol id="assistLog"></ol>
+    </aside>
+    <footer class="assist-foot">
+      <div class="assist-opts" id="assistOpts" hidden>
+        <label class="assist-switch"><input type="checkbox" id="assistBg"><i></i><span>Слушать в фоне — даже когда окно закрыто</span></label>
+        <label class="assist-switch"><input type="checkbox" id="assistAuto"><i></i><span>Запускать вместе с Windows</span></label>
+      </div>
+      <span class="assist-mode" id="assistMode"></span>
+      <button class="assist-end" id="assistEnd" type="button"><span data-icon="power"></span>Выключить</button>
+    </footer>
+  </div>
+
   <div class="modal" id="modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true">
       <h3 id="modalTitle"></h3>
